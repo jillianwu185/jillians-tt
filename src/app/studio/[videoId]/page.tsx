@@ -35,7 +35,32 @@ export default function ReviewPage() {
   const [emphasisMoments, setEmphasisMoments] = useState<EmphasisMoment[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+
+  const [prompt, setPrompt] = useState("");
+  const [promptState, setPromptState] = useState<"idle" | "sending" | "error">("idle");
+  const [promptReasoning, setPromptReasoning] = useState("");
+
+  const [renderState, setRenderState] = useState<"idle" | "rendering" | "error">("idle");
+  const [renderUrl, setRenderUrl] = useState("");
+  const [renderErrorMessage, setRenderErrorMessage] = useState("");
+
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  async function reloadRecipe() {
+    const supabase = createClient();
+    const { data: recipe } = await supabase
+      .from("edit_recipes")
+      .select("id, cuts, emphasis_moments")
+      .eq("video_id", videoId)
+      .order("version", { ascending: false })
+      .limit(1)
+      .single();
+    if (recipe) {
+      setRecipeId(recipe.id);
+      setCuts(recipe.cuts ?? []);
+      setEmphasisMoments(recipe.emphasis_moments ?? []);
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -58,25 +83,11 @@ export default function ReviewPage() {
         .createSignedUrl(video.storage_path, 3600);
       if (signedUrlData) setVideoUrl(signedUrlData.signedUrl);
 
-      const { data: recipe, error: recipeError } = await supabase
-        .from("edit_recipes")
-        .select("id, cuts, emphasis_moments")
-        .eq("video_id", videoId)
-        .order("version", { ascending: false })
-        .limit(1)
-        .single();
-      if (recipeError || !recipe) {
-        setErrorMessage("No edit recipe found for this video");
-        setLoadState("error");
-        return;
-      }
-
-      setRecipeId(recipe.id);
-      setCuts(recipe.cuts ?? []);
-      setEmphasisMoments(recipe.emphasis_moments ?? []);
+      await reloadRecipe();
       setLoadState("ready");
     }
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoId]);
 
   function updateCut(index: number, patch: Partial<Cut>) {
@@ -109,6 +120,49 @@ export default function ReviewPage() {
       await supabase.from("videos").update({ status: "edited" }).eq("id", videoId);
     }
     setSaveState("saved");
+  }
+
+  async function handlePromptSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!prompt.trim()) return;
+    setPromptState("sending");
+    setPromptReasoning("");
+    try {
+      const response = await fetch("/api/prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ video_id: videoId, prompt }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Prompt failed");
+
+      setPromptReasoning(result.reasoning ?? "");
+      setPrompt("");
+      await reloadRecipe();
+      setPromptState("idle");
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : "Prompt failed");
+      setPromptState("error");
+    }
+  }
+
+  async function handleRender() {
+    setRenderState("rendering");
+    setRenderErrorMessage("");
+    try {
+      const response = await fetch("/api/render", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ video_id: videoId }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Render failed");
+      setRenderUrl(result.url);
+      setRenderState("idle");
+    } catch (err) {
+      setRenderErrorMessage(err instanceof Error ? err.message : "Render failed");
+      setRenderState("error");
+    }
   }
 
   if (loadState === "loading") {
@@ -208,6 +262,7 @@ export default function ReviewPage() {
             >
               <span className="font-medium">&quot;{m.word}&quot;</span>
               <span className="text-neutral-500">{m.start.toFixed(2)}s</span>
+              <span className="text-xs text-neutral-400">{m.source}</span>
               <button
                 onClick={() => toggleEmphasisApproved(i)}
                 className={`ml-auto rounded px-3 py-1 ${
@@ -227,10 +282,50 @@ export default function ReviewPage() {
       <button
         onClick={handleSave}
         disabled={saveState === "saving"}
-        className="rounded-md bg-black px-5 py-2.5 text-white"
+        className="mb-10 rounded-md bg-black px-5 py-2.5 text-white"
       >
         {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : "Save changes"}
       </button>
+
+      <section className="mb-10 border-t border-neutral-200 pt-8">
+        <h2 className="mb-3 text-lg font-medium">Prompter</h2>
+        <form onSubmit={handlePromptSubmit} className="flex flex-col gap-3">
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="e.g. make it light and fun, use karaoke captions, zoom in on 'independent'"
+            rows={3}
+            className="rounded-md border border-neutral-300 p-3 text-sm"
+          />
+          <button
+            type="submit"
+            disabled={promptState === "sending"}
+            className="self-start rounded-md bg-black px-5 py-2.5 text-white"
+          >
+            {promptState === "sending" ? "Thinking…" : "Send"}
+          </button>
+        </form>
+        {promptReasoning && (
+          <p className="mt-3 text-sm text-neutral-600">{promptReasoning}</p>
+        )}
+      </section>
+
+      <section className="border-t border-neutral-200 pt-8">
+        <h2 className="mb-3 text-lg font-medium">Render</h2>
+        <button
+          onClick={handleRender}
+          disabled={renderState === "rendering"}
+          className="rounded-md bg-black px-5 py-2.5 text-white"
+        >
+          {renderState === "rendering" ? "Rendering…" : "Render final video"}
+        </button>
+        {renderErrorMessage && (
+          <p className="mt-3 text-sm text-red-600">{renderErrorMessage}</p>
+        )}
+        {renderUrl && (
+          <video src={renderUrl} controls className="mt-4 w-full rounded-lg" />
+        )}
+      </section>
     </main>
   );
 }
