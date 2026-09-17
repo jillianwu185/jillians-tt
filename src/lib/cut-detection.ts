@@ -6,6 +6,7 @@ export type Cut = {
   end: number;
   reason: "filler_word" | "silence";
   user_nudged: boolean;
+  accepted: boolean;
 };
 
 export type EmphasisMoment = {
@@ -28,14 +29,26 @@ export function detectFillerAndSilenceCuts(words: WordAudioFeatures[]): Cut[] {
   for (const w of words) {
     const clean = w.word.trim().toLowerCase().replace(/[.,!?]/g, "");
     if (fillerSet.has(clean)) {
-      cuts.push({ start: w.start, end: w.end, reason: "filler_word", user_nudged: false });
+      cuts.push({
+        start: w.start,
+        end: w.end,
+        reason: "filler_word",
+        user_nudged: false,
+        accepted: true,
+      });
     }
   }
 
   for (let i = 0; i < words.length - 1; i++) {
     const gap = words[i + 1].start - words[i].end;
     if (gap >= STYLE_KIT.silenceGapSeconds) {
-      cuts.push({ start: words[i].end, end: words[i + 1].start, reason: "silence", user_nudged: false });
+      cuts.push({
+        start: words[i].end,
+        end: words[i + 1].start,
+        reason: "silence",
+        user_nudged: false,
+        accepted: true,
+      });
     }
   }
 
