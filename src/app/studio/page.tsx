@@ -6,11 +6,15 @@ import { createClient } from "@/lib/supabase/client";
 type Status = "idle" | "uploading" | "transcribing" | "done" | "error";
 
 type Word = { word: string; start: number; end: number };
+type Cut = { start: number; end: number; reason: string };
+type EmphasisMoment = { word: string; start: number; end: number };
 
 export default function StudioPage() {
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [words, setWords] = useState<Word[]>([]);
+  const [cuts, setCuts] = useState<Cut[]>([]);
+  const [emphasisMoments, setEmphasisMoments] = useState<EmphasisMoment[]>([]);
 
   async function getDuration(file: File): Promise<number> {
     return new Promise((resolve) => {
@@ -31,6 +35,8 @@ export default function StudioPage() {
     setStatus("uploading");
     setErrorMessage("");
     setWords([]);
+    setCuts([]);
+    setEmphasisMoments([]);
 
     try {
       const supabase = createClient();
@@ -71,6 +77,8 @@ export default function StudioPage() {
       }
 
       setWords(transcribeResult.words);
+      setCuts(transcribeResult.cuts);
+      setEmphasisMoments(transcribeResult.emphasisMoments);
       setStatus("done");
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Upload failed");
@@ -101,11 +109,36 @@ export default function StudioPage() {
       {status === "done" && (
         <div className="w-full text-left">
           <p className="mb-3 text-green-700">
-            Transcribed — {words.length} words.
+            Transcribed — {words.length} words, {cuts.length} suggested cuts,{" "}
+            {emphasisMoments.length} emphasis suggestions.
           </p>
-          <p className="max-h-64 overflow-y-auto rounded-md border border-neutral-200 p-3 text-sm text-neutral-700">
+          <p className="mb-4 max-h-64 overflow-y-auto rounded-md border border-neutral-200 p-3 text-sm text-neutral-700">
             {words.map((w) => w.word).join(" ")}
           </p>
+          {cuts.length > 0 && (
+            <div className="mb-4">
+              <p className="mb-1 text-sm font-medium">Suggested cuts</p>
+              <ul className="space-y-1 text-sm text-neutral-600">
+                {cuts.map((c, i) => (
+                  <li key={i}>
+                    {c.reason} — {c.start.toFixed(2)}s to {c.end.toFixed(2)}s
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {emphasisMoments.length > 0 && (
+            <div>
+              <p className="mb-1 text-sm font-medium">Emphasis suggestions</p>
+              <ul className="space-y-1 text-sm text-neutral-600">
+                {emphasisMoments.map((m, i) => (
+                  <li key={i}>
+                    &quot;{m.word}&quot; at {m.start.toFixed(2)}s
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
       {status === "error" && <p className="text-red-600">{errorMessage}</p>}

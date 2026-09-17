@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { analyzeWordAudioFeatures } from "@/lib/audio-analysis";
+import { detectFillerAndSilenceCuts, detectEmphasisCandidates } from "@/lib/cut-detection";
+
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   const { video_id } = await request.json();
@@ -32,6 +36,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Could not download video" }, { status: 500 });
   }
 
+  const videoBuffer = Buffer.from(await fileBlob.arrayBuffer());
+
   const whisperForm = new FormData();
   whisperForm.append("file", fileBlob, "audio.mp4");
   whisperForm.append("model", "whisper-1");
@@ -50,16 +56,16 @@ export async function POST(request: NextRequest) {
   }
 
   const whisperResult = await whisperResponse.json();
-  const words = (whisperResult.words ?? []).map(
+  const wordTimings = (whisperResult.words ?? []).map(
     (w: { word: string; start: number; end: number }) => ({
       word: w.word,
       start: w.start,
       end: w.end,
-      confidence: null,
-      volume_db: null,
-      pitch_delta: null,
     })
   );
+
+  const wordsWithAudioFeatures = await analyzeWordAudioFeatures(videoBuffer, wordTimings);
+  const words = wordsWithAudioFeatures.map((w) => ({ ...w, confidence: null }));
 
   const { error: insertError } = await supabase
     .from("transcripts")
@@ -68,13 +74,29 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 
+  const cuts = detectFillerAndSilenceCuts(wordsWithAudioFeatures);
+  const emphasisMoments = detectEmphasisCandidates(wordsWithAudioFeatures);
+
+  const { error: recipeError } = await supabase.from("edit_recipes").insert({
+    video_id,
+    prompt_history: [],
+    cuts,
+    captions: [],
+    emphasis_moments: emphasisMoments,
+    font_map: {},
+    version: 1,
+  });
+  if (recipeError) {
+    return NextResponse.json({ error: recipeError.message }, { status: 500 });
+  }
+
   const { error: updateError } = await supabase
     .from("videos")
-    .update({ status: "transcribed" })
+    .update({ status: "draft_cut" })
     .eq("id", video_id);
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
 
-  return NextResponse.json({ words });
+  return NextResponse.json({ words, cuts, emphasisMoments });
 }
