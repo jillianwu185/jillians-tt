@@ -43,6 +43,7 @@ export default function ReviewPage() {
   const [renderState, setRenderState] = useState<"idle" | "rendering" | "error">("idle");
   const [renderUrl, setRenderUrl] = useState("");
   const [renderErrorMessage, setRenderErrorMessage] = useState("");
+  const [renderProgress, setRenderProgress] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -149,16 +150,43 @@ export default function ReviewPage() {
   async function handleRender() {
     setRenderState("rendering");
     setRenderErrorMessage("");
+    setRenderProgress(0);
     try {
-      const response = await fetch("/api/render", {
+      const startResponse = await fetch("/api/render/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ video_id: videoId }),
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Render failed");
-      setRenderUrl(result.url);
-      setRenderState("idle");
+      const startResult = await startResponse.json();
+      if (!startResponse.ok) throw new Error(startResult.error ?? "Render failed to start");
+
+      const { renderId, bucketName, editRecipeId } = startResult;
+
+      // Poll every 4s. Renders can take several minutes.
+      for (let attempt = 0; attempt < 200; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+        const statusResponse = await fetch("/api/render/status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            video_id: videoId,
+            render_id: renderId,
+            bucket_name: bucketName,
+            edit_recipe_id: editRecipeId,
+          }),
+        });
+        const statusResult = await statusResponse.json();
+        if (!statusResponse.ok) throw new Error(statusResult.error ?? "Render failed");
+
+        if (statusResult.done) {
+          if (statusResult.error) throw new Error(statusResult.error);
+          setRenderUrl(statusResult.url);
+          setRenderState("idle");
+          return;
+        }
+        setRenderProgress(statusResult.overallProgress ?? 0);
+      }
+      throw new Error("Render is taking longer than expected — check back shortly");
     } catch (err) {
       setRenderErrorMessage(err instanceof Error ? err.message : "Render failed");
       setRenderState("error");
@@ -317,8 +345,15 @@ export default function ReviewPage() {
           disabled={renderState === "rendering"}
           className="rounded-md bg-black px-5 py-2.5 text-white"
         >
-          {renderState === "rendering" ? "Rendering…" : "Render final video"}
+          {renderState === "rendering"
+            ? `Rendering… ${Math.round(renderProgress * 100)}%`
+            : "Render final video"}
         </button>
+        {renderState === "rendering" && (
+          <p className="mt-2 text-sm text-neutral-500">
+            This can take a few minutes — feel free to leave this open in the background.
+          </p>
+        )}
         {renderErrorMessage && (
           <p className="mt-3 text-sm text-red-600">{renderErrorMessage}</p>
         )}

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import path from "path";
-import { mkdtemp, readFile, rm } from "fs/promises";
-import { tmpdir } from "os";
-import { bundle } from "@remotion/bundler";
-import { renderMedia, selectComposition } from "@remotion/renderer";
+import { renderMediaOnLambda } from "@remotion/lambda/client";
 import { createClient } from "@/lib/supabase/server";
 
-export const maxDuration = 300;
+export const maxDuration = 60;
+
+const FUNCTION_NAME = process.env.REMOTION_LAMBDA_FUNCTION_NAME!;
+const REGION = process.env.REMOTION_LAMBDA_REGION as "us-east-1";
+const SERVE_URL = process.env.REMOTION_LAMBDA_SERVE_URL!;
 
 export async function POST(request: NextRequest) {
   const { video_id } = await request.json();
@@ -75,55 +75,16 @@ export async function POST(request: NextRequest) {
     accentColor: recipe.accent_color ?? "#FCEF91",
   };
 
-  const outDir = await mkdtemp(path.join(tmpdir(), "render-"));
-  const outputPath = path.join(outDir, "output.mp4");
+  const { renderId, bucketName } = await renderMediaOnLambda({
+    region: REGION,
+    functionName: FUNCTION_NAME,
+    serveUrl: SERVE_URL,
+    composition: "EditedVideo",
+    inputProps,
+    codec: "h264",
+    crf: 28,
+    framesPerLambda: 3000,
+  });
 
-  try {
-    const bundleLocation = await bundle({
-      entryPoint: path.join(process.cwd(), "src/remotion/index.ts"),
-    });
-
-    const composition = await selectComposition({
-      serveUrl: bundleLocation,
-      id: "EditedVideo",
-      inputProps,
-    });
-
-    await renderMedia({
-      composition,
-      serveUrl: bundleLocation,
-      codec: "h264",
-      outputLocation: outputPath,
-      inputProps,
-      crf: 28,
-    });
-
-    const outputBuffer = await readFile(outputPath);
-    const renderStoragePath = `${user.id}/${Date.now()}-render.mp4`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("renders")
-      .upload(renderStoragePath, outputBuffer, { contentType: "video/mp4" });
-    if (uploadError) {
-      return NextResponse.json({ error: uploadError.message }, { status: 500 });
-    }
-
-    const { error: renderInsertError } = await supabase.from("renders").insert({
-      edit_recipe_id: recipe.id,
-      storage_path: renderStoragePath,
-    });
-    if (renderInsertError) {
-      return NextResponse.json({ error: renderInsertError.message }, { status: 500 });
-    }
-
-    await supabase.from("videos").update({ status: "exported" }).eq("id", video_id);
-
-    const { data: renderSignedUrl } = await supabase.storage
-      .from("renders")
-      .createSignedUrl(renderStoragePath, 3600);
-
-    return NextResponse.json({ url: renderSignedUrl?.signedUrl });
-  } finally {
-    await rm(outDir, { recursive: true, force: true });
-  }
+  return NextResponse.json({ renderId, bucketName, editRecipeId: recipe.id });
 }
