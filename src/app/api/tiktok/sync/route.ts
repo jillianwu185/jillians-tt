@@ -114,15 +114,38 @@ async function handleSync(request: NextRequest) {
   };
   const videos: TikTokVideo[] = videoListData.data?.videos ?? [];
 
+  type RenderWithRecipe = {
+    rendered_at: string;
+    edit_recipes: { caption_style: string | null; videos: { topic_tag: string | null } | null } | null;
+  };
+  const { data: renders } = await supabase
+    .from("renders")
+    .select("rendered_at, edit_recipes(caption_style, videos(topic_tag))")
+    .order("rendered_at", { ascending: false });
+  const rendersTyped = (renders ?? []) as unknown as RenderWithRecipe[];
+
+  const MATCH_WINDOW_MS = 72 * 60 * 60 * 1000;
+
   for (const video of videos) {
+    const postedAt = new Date(video.create_time * 1000);
+
+    const match = rendersTyped
+      .filter((r) => {
+        const renderedAt = new Date(r.rendered_at);
+        return renderedAt <= postedAt && postedAt.getTime() - renderedAt.getTime() <= MATCH_WINDOW_MS;
+      })
+      .sort((a, b) => new Date(b.rendered_at).getTime() - new Date(a.rendered_at).getTime())[0];
+
     await supabase.from("tiktok_videos").upsert(
       {
         tiktok_video_id: video.id,
-        posted_at: new Date(video.create_time * 1000).toISOString(),
+        posted_at: postedAt.toISOString(),
         views: video.view_count,
         likes: video.like_count,
         comments: video.comment_count,
         shares: video.share_count,
+        caption_style_tag: match?.edit_recipes?.caption_style ?? undefined,
+        topic_tag: match?.edit_recipes?.videos?.topic_tag ?? undefined,
         synced_at: new Date().toISOString(),
       },
       { onConflict: "tiktok_video_id" }

@@ -117,10 +117,15 @@ function VideoList({ videos }: { videos: TikTokVideoRow[] }) {
           <p className="mb-1 text-neutral-500">
             {video.posted_at ? new Date(video.posted_at).toLocaleDateString() : "unknown date"}
           </p>
-          <p className="text-neutral-700">
+          <p className="mb-1 text-neutral-700">
             {video.views.toLocaleString()} views · {video.likes.toLocaleString()} likes ·{" "}
             {video.comments.toLocaleString()} comments · {video.shares.toLocaleString()} shares
           </p>
+          {(video.topic_tag || video.caption_style_tag) && (
+            <p className="text-xs text-neutral-500">
+              {[video.topic_tag, video.caption_style_tag].filter(Boolean).join(" · ")}
+            </p>
+          )}
         </li>
       ))}
     </ul>

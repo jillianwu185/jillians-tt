@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { analyzeWordAudioFeatures } from "@/lib/audio-analysis";
 import { detectFillerAndSilenceCuts, detectEmphasisCandidates } from "@/lib/cut-detection";
+import { generateTopicTag } from "@/lib/topic-tag";
 
 export const maxDuration = 60;
 
@@ -90,9 +91,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: recipeError.message }, { status: 500 });
   }
 
+  const transcriptText = words.map((w) => w.word).join(" ");
+  const topicTag = await generateTopicTag(transcriptText).catch(() => null);
+
   const { error: updateError } = await supabase
     .from("videos")
-    .update({ status: "draft_cut" })
+    .update({ status: "draft_cut", topic_tag: topicTag })
     .eq("id", video_id);
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
