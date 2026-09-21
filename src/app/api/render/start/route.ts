@@ -117,7 +117,6 @@ export async function POST(request: NextRequest) {
     inputProps: { clips, fontMap },
     codec: "h264",
     crf: 28,
-    framesPerLambda: 3000,
   });
 
   return NextResponse.json({ renderId, bucketName, editRecipeId, projectId: project_id ?? null });
