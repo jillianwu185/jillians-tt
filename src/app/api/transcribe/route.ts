@@ -38,35 +38,51 @@ export async function POST(request: NextRequest) {
   }
 
   const videoBuffer = Buffer.from(await fileBlob.arrayBuffer());
-  const audioBuffer = await extractCompressedAudio(videoBuffer);
 
-  const whisperForm = new FormData();
-  whisperForm.append("file", new Blob([new Uint8Array(audioBuffer)]), "audio.mp3");
-  whisperForm.append("model", "whisper-1");
-  whisperForm.append("response_format", "verbose_json");
-  whisperForm.append("timestamp_granularities[]", "word");
-
-  const whisperResponse = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-    body: whisperForm,
-  });
-
-  if (!whisperResponse.ok) {
-    const errText = await whisperResponse.text();
-    return NextResponse.json({ error: `Whisper API error: ${errText}` }, { status: 502 });
+  let audioBuffer: Buffer | null = null;
+  try {
+    audioBuffer = await extractCompressedAudio(videoBuffer);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const hasNoAudioTrack = /does not contain any stream|matches no streams/i.test(message);
+    if (!hasNoAudioTrack) {
+      return NextResponse.json({ error: `Audio extraction failed: ${message}` }, { status: 500 });
+    }
+    // Silent clip (e.g. B-roll with no dialogue) — proceed with an empty transcript.
   }
 
-  const whisperResult = await whisperResponse.json();
-  const wordTimings = (whisperResult.words ?? []).map(
-    (w: { word: string; start: number; end: number }) => ({
-      word: w.word,
-      start: w.start,
-      end: w.end,
-    })
-  );
+  let wordsWithAudioFeatures: Awaited<ReturnType<typeof analyzeWordAudioFeatures>> = [];
 
-  const wordsWithAudioFeatures = await analyzeWordAudioFeatures(videoBuffer, wordTimings);
+  if (audioBuffer) {
+    const whisperForm = new FormData();
+    whisperForm.append("file", new Blob([new Uint8Array(audioBuffer)]), "audio.mp3");
+    whisperForm.append("model", "whisper-1");
+    whisperForm.append("response_format", "verbose_json");
+    whisperForm.append("timestamp_granularities[]", "word");
+
+    const whisperResponse = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+      body: whisperForm,
+    });
+
+    if (!whisperResponse.ok) {
+      const errText = await whisperResponse.text();
+      return NextResponse.json({ error: `Whisper API error: ${errText}` }, { status: 502 });
+    }
+
+    const whisperResult = await whisperResponse.json();
+    const wordTimings = (whisperResult.words ?? []).map(
+      (w: { word: string; start: number; end: number }) => ({
+        word: w.word,
+        start: w.start,
+        end: w.end,
+      })
+    );
+
+    wordsWithAudioFeatures = await analyzeWordAudioFeatures(videoBuffer, wordTimings);
+  }
+
   const words = wordsWithAudioFeatures.map((w) => ({ ...w, confidence: null }));
 
   const { error: insertError } = await supabase
@@ -93,7 +109,9 @@ export async function POST(request: NextRequest) {
   }
 
   const transcriptText = words.map((w) => w.word).join(" ");
-  const topicTag = await generateTopicTag(transcriptText).catch(() => null);
+  const topicTag = transcriptText
+    ? await generateTopicTag(transcriptText).catch(() => null)
+    : "silent clip";
 
   const { error: updateError } = await supabase
     .from("videos")
