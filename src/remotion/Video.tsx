@@ -1,13 +1,9 @@
-import { useEffect, useState } from "react";
 import {
   AbsoluteFill,
   OffthreadVideo,
   Sequence,
-  staticFile,
   useCurrentFrame,
   useVideoConfig,
-  delayRender,
-  continueRender,
 } from "remotion";
 import { loadFont as loadPoppins } from "@remotion/google-fonts/Poppins";
 import { loadFont as loadPlayfair } from "@remotion/google-fonts/PlayfairDisplay";
@@ -23,25 +19,7 @@ const FONT_FAMILIES: Record<string, string> = {
   chic: playfairFamily,
   bubbly: poppinsFamily,
   airy: publicSansFamily,
-  capcut_default: "ProximaNova",
 };
-
-function useProximaNovaFont() {
-  const [handle] = useState(() => delayRender("Loading Proxima Nova"));
-  useEffect(() => {
-    const face = new FontFace(
-      "ProximaNova",
-      `url(${staticFile("/fonts/ProximaNovaRegular.ttf")})`
-    );
-    face
-      .load()
-      .then((loaded) => {
-        document.fonts.add(loaded);
-        continueRender(handle);
-      })
-      .catch(() => continueRender(handle));
-  }, [handle]);
-}
 
 export type EmphasisMomentProps = {
   word: string;
@@ -73,8 +51,6 @@ export function VideoComposition({
   captionStyle,
   accentColor,
 }: VideoCompositionProps) {
-  useProximaNovaFont();
-
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const outputTime = frame / fps;
