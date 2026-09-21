@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { analyzeWordAudioFeatures } from "@/lib/audio-analysis";
+import { analyzeWordAudioFeatures, extractCompressedAudio } from "@/lib/audio-analysis";
 import { detectFillerAndSilenceCuts, detectEmphasisCandidates } from "@/lib/cut-detection";
 import { generateTopicTag } from "@/lib/topic-tag";
 
@@ -38,9 +38,10 @@ export async function POST(request: NextRequest) {
   }
 
   const videoBuffer = Buffer.from(await fileBlob.arrayBuffer());
+  const audioBuffer = await extractCompressedAudio(videoBuffer);
 
   const whisperForm = new FormData();
-  whisperForm.append("file", fileBlob, "audio.mp4");
+  whisperForm.append("file", new Blob([new Uint8Array(audioBuffer)]), "audio.mp3");
   whisperForm.append("model", "whisper-1");
   whisperForm.append("response_format", "verbose_json");
   whisperForm.append("timestamp_granularities[]", "word");

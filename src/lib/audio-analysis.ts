@@ -83,6 +83,41 @@ function estimatePitchHz(samples: Int16Array, from: number, to: number): number 
   return SAMPLE_RATE / bestLag;
 }
 
+// Whisper's API caps uploads at 25MB. A compressed audio-only extract is far
+// smaller than the source video and comfortably stays under that for any
+// 30-90s clip, so transcription should send this instead of the raw video.
+export async function extractCompressedAudio(videoBuffer: Buffer): Promise<Buffer> {
+  const dir = await mkdtemp(join(tmpdir(), "audio-"));
+  const inputPath = join(dir, "input.mp4");
+  const outputPath = join(dir, "output.mp3");
+
+  try {
+    await writeFile(inputPath, videoBuffer);
+
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(ffmpegPath as string, [
+        "-y",
+        "-i",
+        inputPath,
+        "-vn",
+        "-acodec",
+        "libmp3lame",
+        "-ac",
+        "1",
+        "-b:a",
+        "64k",
+        outputPath,
+      ]);
+      proc.on("error", reject);
+      proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`))));
+    });
+
+    return await readFile(outputPath);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 export async function analyzeWordAudioFeatures(
   videoBuffer: Buffer,
   words: WordTiming[]
