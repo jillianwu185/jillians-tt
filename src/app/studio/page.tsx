@@ -1,111 +1,54 @@
-"use client";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import UploadWidget from "@/app/studio/UploadWidget";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+const STATUS_LABELS: Record<string, string> = {
+  uploaded: "Uploaded",
+  transcribed: "Transcribed",
+  draft_cut: "Ready to review",
+  edited: "Reviewed",
+  exported: "Exported",
+};
 
-type Status = "idle" | "uploading" | "transcribing" | "error";
-
-const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
-
-export default function StudioPage() {
-  const router = useRouter();
-  const [status, setStatus] = useState<Status>("idle");
-  const [errorMessage, setErrorMessage] = useState("");
-
-  async function getDuration(file: File): Promise<number> {
-    return new Promise((resolve) => {
-      const video = document.createElement("video");
-      video.preload = "metadata";
-      video.onloadedmetadata = () => {
-        URL.revokeObjectURL(video.src);
-        resolve(video.duration);
-      };
-      video.src = URL.createObjectURL(file);
-    });
-  }
-
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      setErrorMessage(
-        `This file is ${(file.size / 1024 / 1024).toFixed(0)}MB — Supabase's free plan caps uploads at 50MB. Try a shorter clip or lower export quality.`
-      );
-      setStatus("error");
-      return;
-    }
-
-    setStatus("uploading");
-    setErrorMessage("");
-
-    try {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not signed in");
-
-      const duration = await getDuration(file);
-      const storagePath = `${user.id}/${Date.now()}-${file.name}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("videos")
-        .upload(storagePath, file);
-      if (uploadError) throw uploadError;
-
-      const { data: videoRow, error: insertError } = await supabase
-        .from("videos")
-        .insert({
-          storage_path: storagePath,
-          duration_seconds: duration,
-          status: "uploaded",
-        })
-        .select("id")
-        .single();
-      if (insertError) throw insertError;
-
-      setStatus("transcribing");
-
-      const transcribeResponse = await fetch("/api/transcribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ video_id: videoRow.id }),
-      });
-      const transcribeResult = await transcribeResponse.json();
-      if (!transcribeResponse.ok) {
-        throw new Error(transcribeResult.error ?? "Transcription failed");
-      }
-
-      router.push(`/studio/${videoRow.id}`);
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Upload failed");
-      setStatus("error");
-    }
-  }
+export default async function StudioPage() {
+  const supabase = await createClient();
+  const { data: videos } = await supabase
+    .from("videos")
+    .select("id, status, uploaded_at, duration_seconds, topic_tag")
+    .order("uploaded_at", { ascending: false });
 
   return (
-    <main className="mx-auto flex max-w-xl flex-col items-center gap-6 px-6 py-32 text-center">
+    <main className="mx-auto flex max-w-xl flex-col items-center gap-6 px-6 py-16 text-center">
       <h1 className="text-2xl font-semibold">Studio</h1>
       <p className="text-neutral-600">Upload a raw clip to get started.</p>
 
-      <label className="flex w-full cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-neutral-300 px-6 py-12">
-        <span className="font-medium">
-          {status === "uploading" && "Uploading…"}
-          {status === "transcribing" && "Transcribing…"}
-          {(status === "idle" || status === "error") && "Choose a video"}
-        </span>
-        <input
-          type="file"
-          accept="video/*"
-          className="hidden"
-          onChange={handleFileChange}
-          disabled={status === "uploading" || status === "transcribing"}
-        />
-      </label>
+      <UploadWidget />
 
-      {status === "error" && <p className="text-red-600">{errorMessage}</p>}
+      {videos && videos.length > 0 && (
+        <section className="w-full text-left">
+          <h2 className="mb-3 text-lg font-medium">Your videos</h2>
+          <ul className="space-y-2">
+            {videos.map((video) => (
+              <li key={video.id}>
+                <Link
+                  href={`/studio/${video.id}`}
+                  className="flex items-center justify-between rounded-md border border-neutral-200 p-3 text-sm hover:bg-neutral-50"
+                >
+                  <span>
+                    {video.topic_tag ?? "(untitled)"}
+                    <span className="ml-2 text-neutral-400">
+                      {video.duration_seconds ? `${Math.round(video.duration_seconds)}s` : ""}
+                    </span>
+                  </span>
+                  <span className="text-neutral-500">
+                    {STATUS_LABELS[video.status] ?? video.status}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </main>
   );
 }
