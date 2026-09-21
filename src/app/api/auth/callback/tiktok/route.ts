@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -33,12 +34,21 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    await supabase.from("tiktok_credentials").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    await supabase.from("tiktok_credentials").insert({
+      access_token: tokenData.access_token,
+      refresh_token: tokenData.refresh_token,
+      expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
+    });
+  }
+
   const response = NextResponse.redirect(new URL("/insights", request.url));
-  response.cookies.set("tiktok_access_token", tokenData.access_token, {
-    httpOnly: true,
-    maxAge: tokenData.expires_in ?? 86400,
-    path: "/",
-  });
   response.cookies.delete("tiktok_oauth_state");
   return response;
 }

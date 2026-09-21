@@ -12,6 +12,9 @@ export default function Home() {
         <Link href="/insights" className="rounded-md bg-black px-5 py-2.5 text-white">
           Insights
         </Link>
+        <Link href="/ideas" className="rounded-md bg-black px-5 py-2.5 text-white">
+          Ideas
+        </Link>
       </div>
     </main>
   );
