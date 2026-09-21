@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { STYLE_KIT } from "@/lib/style-kit";
 
 type Cut = {
   start: number;
@@ -16,13 +17,22 @@ type EmphasisMoment = {
   word: string;
   start: number;
   end: number;
-  treatment: string;
+  treatment: "punch_in_zoom" | "keyword_callout" | "both";
   source: string;
   approved: boolean;
+  zoomLevel: number;
+  calloutText: string;
+  calloutFont: string;
+  calloutColor: string;
   [key: string]: unknown;
 };
 
+type Font = { key: string; display_name: string; google_font_family: string };
+
 type LoadState = "loading" | "ready" | "error";
+
+const CAPTION_STYLES = ["two_layer_headline", "karaoke_reveal", "static_block"] as const;
+const TREATMENTS = ["punch_in_zoom", "keyword_callout", "both"] as const;
 
 export default function ReviewPage() {
   const { videoId } = useParams<{ videoId: string }>();
@@ -36,6 +46,14 @@ export default function ReviewPage() {
   const [currentTime, setCurrentTime] = useState(0);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
 
+  const [captionStyle, setCaptionStyle] = useState<string>("static_block");
+  const [captionFont, setCaptionFont] = useState<string>("airy");
+  const [accentColor, setAccentColor] = useState<string>(STYLE_KIT.colors.yellow);
+  const [fonts, setFonts] = useState<Font[]>([]);
+  const [newFontName, setNewFontName] = useState("");
+  const [addFontState, setAddFontState] = useState<"idle" | "adding" | "error">("idle");
+  const [addFontError, setAddFontError] = useState("");
+
   const [prompt, setPrompt] = useState("");
   const [promptState, setPromptState] = useState<"idle" | "sending" | "error">("idle");
   const [promptReasoning, setPromptReasoning] = useState("");
@@ -46,6 +64,12 @@ export default function ReviewPage() {
   const [pastRenders, setPastRenders] = useState<{ id: string; rendered_at: string; url: string }[]>([]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  async function loadFonts() {
+    const response = await fetch("/api/fonts");
+    const result = await response.json();
+    if (response.ok) setFonts(result.fonts);
+  }
 
   async function loadPastRenders() {
     const supabase = createClient();
@@ -72,7 +96,7 @@ export default function ReviewPage() {
     const supabase = createClient();
     const { data: recipe } = await supabase
       .from("edit_recipes")
-      .select("id, cuts, emphasis_moments")
+      .select("id, cuts, emphasis_moments, caption_style, accent_color, font_map")
       .eq("video_id", videoId)
       .order("version", { ascending: false })
       .limit(1)
@@ -81,6 +105,9 @@ export default function ReviewPage() {
       setRecipeId(recipe.id);
       setCuts(recipe.cuts ?? []);
       setEmphasisMoments(recipe.emphasis_moments ?? []);
+      setCaptionStyle(recipe.caption_style ?? "static_block");
+      setAccentColor(recipe.accent_color ?? STYLE_KIT.colors.yellow);
+      setCaptionFont((recipe.font_map as Record<string, string> | null)?.caption ?? "airy");
     }
   }
 
@@ -107,6 +134,7 @@ export default function ReviewPage() {
 
       await reloadRecipe();
       await loadPastRenders();
+      await loadFonts();
       setLoadState("ready");
     }
     load();
@@ -131,13 +159,45 @@ export default function ReviewPage() {
     );
   }
 
+  function updateEmphasis(index: number, patch: Partial<EmphasisMoment>) {
+    setEmphasisMoments((prev) => prev.map((m, i) => (i === index ? { ...m, ...patch } : m)));
+  }
+
+  async function handleAddFont(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newFontName.trim()) return;
+    setAddFontState("adding");
+    setAddFontError("");
+    try {
+      const response = await fetch("/api/fonts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ google_font_family: newFontName.trim() }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not add font");
+      setNewFontName("");
+      setAddFontState("idle");
+      await loadFonts();
+    } catch (err) {
+      setAddFontError(err instanceof Error ? err.message : "Could not add font");
+      setAddFontState("error");
+    }
+  }
+
   async function handleSave() {
     if (!recipeId) return;
     setSaveState("saving");
     const supabase = createClient();
     const { error } = await supabase
       .from("edit_recipes")
-      .update({ cuts, emphasis_moments: emphasisMoments })
+      .update({
+        cuts,
+        emphasis_moments: emphasisMoments,
+        caption_style: captionStyle,
+        accent_color: accentColor,
+        font_map: { caption: captionFont },
+      })
       .eq("id", recipeId);
     if (!error) {
       await supabase.from("videos").update({ status: "edited" }).eq("id", videoId);
@@ -226,7 +286,7 @@ export default function ReviewPage() {
     <main className="mx-auto max-w-2xl px-6 py-16">
       <h1 className="mb-2 text-2xl font-semibold">Review cuts</h1>
       <p className="mb-6 text-neutral-600">
-        Nudge cut points and approve emphasis suggestions before rendering.
+        Nudge cut points, style everything directly, or use the prompter below.
       </p>
 
       {videoUrl && (
@@ -258,6 +318,82 @@ export default function ReviewPage() {
           />
         ))}
       </div>
+
+      <section className="mb-10">
+        <h2 className="mb-3 text-lg font-medium">Style</h2>
+
+        <p className="mb-2 text-sm font-medium text-neutral-700">Caption style</p>
+        <div className="mb-4 flex flex-wrap gap-2">
+          {CAPTION_STYLES.map((style) => (
+            <button
+              key={style}
+              onClick={() => setCaptionStyle(style)}
+              className={`rounded-full px-3 py-1.5 text-sm ${
+                captionStyle === style ? "bg-black text-white" : "bg-neutral-100 text-neutral-600"
+              }`}
+            >
+              {style.replace(/_/g, " ")}
+            </button>
+          ))}
+        </div>
+
+        <p className="mb-2 text-sm font-medium text-neutral-700">Caption font</p>
+        <select
+          value={captionFont}
+          onChange={(e) => setCaptionFont(e.target.value)}
+          className="mb-4 rounded border border-neutral-300 px-2 py-1.5 text-sm"
+        >
+          {fonts.map((f) => (
+            <option key={f.key} value={f.key}>
+              {f.display_name}
+            </option>
+          ))}
+        </select>
+
+        <p className="mb-2 text-sm font-medium text-neutral-700">Accent color</p>
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          {Object.entries(STYLE_KIT.colors).map(([name, hex]) => (
+            <button
+              key={name}
+              onClick={() => setAccentColor(hex)}
+              title={name}
+              className={`h-8 w-8 rounded-full border-2 ${
+                accentColor === hex ? "border-black" : "border-transparent"
+              }`}
+              style={{ backgroundColor: hex }}
+            />
+          ))}
+          <input
+            type="color"
+            value={accentColor}
+            onChange={(e) => setAccentColor(e.target.value)}
+            className="h-8 w-8 rounded border border-neutral-300"
+          />
+        </div>
+
+        <details className="mt-4 text-sm">
+          <summary className="cursor-pointer text-neutral-500">
+            Fonts ({fonts.length}) — add another
+          </summary>
+          <form onSubmit={handleAddFont} className="mt-2 flex gap-2">
+            <input
+              type="text"
+              value={newFontName}
+              onChange={(e) => setNewFontName(e.target.value)}
+              placeholder="Any Google Font name, e.g. Bebas Neue"
+              className="flex-1 rounded border border-neutral-300 px-2 py-1.5"
+            />
+            <button
+              type="submit"
+              disabled={addFontState === "adding"}
+              className="rounded bg-black px-3 py-1.5 text-white"
+            >
+              {addFontState === "adding" ? "Adding…" : "Add"}
+            </button>
+          </form>
+          {addFontError && <p className="mt-1 text-red-600">{addFontError}</p>}
+        </details>
+      </section>
 
       <section className="mb-8">
         <h2 className="mb-3 text-lg font-medium">Suggested cuts ({cuts.length})</h2>
@@ -302,29 +438,85 @@ export default function ReviewPage() {
 
       <section className="mb-8">
         <h2 className="mb-3 text-lg font-medium">
-          Emphasis suggestions ({emphasisMoments.length})
+          Emphasis moments ({emphasisMoments.length})
         </h2>
         <ul className="space-y-3">
           {emphasisMoments.map((m, i) => (
-            <li
-              key={i}
-              className="flex items-center gap-3 rounded-md border border-neutral-200 p-3 text-sm"
-            >
-              <span className="font-medium">&quot;{m.word}&quot;</span>
-              <span className="text-neutral-500">{m.start.toFixed(2)}s</span>
-              <span className="text-xs text-neutral-400">{m.source}</span>
-              <button
-                onClick={() => toggleEmphasisApproved(i)}
-                className={`ml-auto rounded px-3 py-1 ${
-                  m.approved ? "bg-green-100 text-green-800" : "bg-neutral-100 text-neutral-600"
-                }`}
-              >
-                {m.approved ? "Approved" : "Approve"}
-              </button>
+            <li key={i} className="rounded-md border border-neutral-200 p-3 text-sm">
+              <div className="mb-2 flex items-center gap-3">
+                <span className="font-medium">&quot;{m.word}&quot;</span>
+                <span className="text-neutral-500">{m.start.toFixed(2)}s</span>
+                <span className="text-xs text-neutral-400">{m.source}</span>
+                <button
+                  onClick={() => toggleEmphasisApproved(i)}
+                  className={`ml-auto rounded px-3 py-1 ${
+                    m.approved ? "bg-green-100 text-green-800" : "bg-neutral-100 text-neutral-600"
+                  }`}
+                >
+                  {m.approved ? "Approved" : "Approve"}
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={m.treatment}
+                  onChange={(e) => updateEmphasis(i, { treatment: e.target.value as EmphasisMoment["treatment"] })}
+                  className="rounded border border-neutral-300 px-2 py-1 text-xs"
+                >
+                  {TREATMENTS.map((t) => (
+                    <option key={t} value={t}>
+                      {t.replace(/_/g, " ")}
+                    </option>
+                  ))}
+                </select>
+
+                {(m.treatment === "punch_in_zoom" || m.treatment === "both") && (
+                  <label className="flex items-center gap-1 text-xs text-neutral-500">
+                    zoom
+                    <input
+                      type="number"
+                      step={0.02}
+                      min={1}
+                      max={2}
+                      value={m.zoomLevel}
+                      onChange={(e) => updateEmphasis(i, { zoomLevel: parseFloat(e.target.value) })}
+                      className="w-16 rounded border border-neutral-300 px-1.5 py-1"
+                    />
+                  </label>
+                )}
+
+                {(m.treatment === "keyword_callout" || m.treatment === "both") && (
+                  <>
+                    <input
+                      type="text"
+                      value={m.calloutText}
+                      onChange={(e) => updateEmphasis(i, { calloutText: e.target.value })}
+                      className="w-32 rounded border border-neutral-300 px-1.5 py-1 text-xs"
+                    />
+                    <select
+                      value={m.calloutFont}
+                      onChange={(e) => updateEmphasis(i, { calloutFont: e.target.value })}
+                      className="rounded border border-neutral-300 px-2 py-1 text-xs"
+                    >
+                      {fonts.map((f) => (
+                        <option key={f.key} value={f.key}>
+                          {f.display_name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="color"
+                      value={m.calloutColor}
+                      onChange={(e) => updateEmphasis(i, { calloutColor: e.target.value })}
+                      className="h-7 w-7 rounded border border-neutral-300"
+                    />
+                  </>
+                )}
+              </div>
             </li>
           ))}
           {emphasisMoments.length === 0 && (
-            <p className="text-sm text-neutral-500">No emphasis suggestions.</p>
+            <p className="text-sm text-neutral-500">No emphasis moments.</p>
           )}
         </ul>
       </section>

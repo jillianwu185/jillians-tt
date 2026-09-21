@@ -5,54 +5,58 @@ import { STYLE_KIT } from "@/lib/style-kit";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const UPDATE_PROJECT_TOOL = {
-  name: "update_project_recipe",
-  description: "Apply the user's requested changes across all clips in this multi-clip project.",
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      mood: { type: "string", description: "Overall mood/tone, applied to every clip, e.g. 'light and fun'." },
-      caption_style: {
-        type: "string",
-        enum: ["two_layer_headline", "karaoke_reveal", "static_block"],
-        description: "Applied to every clip in the project.",
-      },
-      accent_color: {
-        type: "string",
-        description: "Hex color, applied to every clip. Prefer a Style Kit color unless asked otherwise.",
-      },
-      new_emphasis_moments: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            word: {
-              type: "string",
-              description: "The exact word to emphasize (must match a word in one of the clip transcripts).",
+function buildTool(fontKeys: string[]) {
+  return {
+    name: "update_project_recipe",
+    description: "Apply the user's requested changes across all clips in this multi-clip project.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        mood: { type: "string", description: "Overall mood/tone, applied to every clip, e.g. 'light and fun'." },
+        caption_style: {
+          type: "string",
+          enum: ["two_layer_headline", "karaoke_reveal", "static_block"],
+          description: "Applied to every clip in the project.",
+        },
+        caption_font: { type: "string", enum: fontKeys, description: "Font for captions, applied to every clip." },
+        accent_color: {
+          type: "string",
+          description: "Hex color, applied to every clip. Prefer a Style Kit color unless asked otherwise.",
+        },
+        new_emphasis_moments: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              word: {
+                type: "string",
+                description: "The exact word to emphasize (must match a word in one of the clip transcripts).",
+              },
+              clip_index: {
+                type: "number",
+                description:
+                  "0-based index of the clip this word belongs to, from the numbered transcripts below. Omit only if genuinely ambiguous — the word will then be applied to every clip where it's found.",
+              },
+              treatment: {
+                type: "string",
+                enum: ["punch_in_zoom", "keyword_callout", "both"],
+              },
+              zoomLevel: { type: "number", description: "Zoom scale, e.g. 1.18 subtle, 1.4 strong. Defaults to 1.18." },
+              calloutText: { type: "string", description: "Defaults to the word itself if omitted." },
+              calloutFont: { type: "string", enum: fontKeys },
+              calloutColor: { type: "string", description: "Hex color, defaults to Style Kit yellow." },
             },
-            clip_index: {
-              type: "number",
-              description:
-                "0-based index of the clip this word belongs to, from the numbered transcripts below. Omit only if genuinely ambiguous — the word will then be applied to every clip where it's found.",
-            },
-            treatment: {
-              type: "string",
-              enum: ["punch_in_zoom", "keyword_callout", "both"],
-            },
-            calloutText: { type: "string", description: "Defaults to the word itself if omitted." },
-            calloutFont: { type: "string", enum: ["chic", "bubbly", "airy"] },
-            calloutColor: { type: "string", description: "Hex color, defaults to Style Kit yellow." },
+            required: ["word", "treatment"],
           },
-          required: ["word", "treatment"],
+        },
+        reasoning: {
+          type: "string",
+          description: "One or two sentences explaining what changed, shown to the user.",
         },
       },
-      reasoning: {
-        type: "string",
-        description: "One or two sentences explaining what changed, shown to the user.",
-      },
     },
-  },
-};
+  };
+}
 
 export async function POST(request: NextRequest) {
   const { project_id, prompt } = await request.json();
@@ -76,6 +80,10 @@ export async function POST(request: NextRequest) {
   if (clipsError || !clipVideos || clipVideos.length === 0) {
     return NextResponse.json({ error: "No clips found for this project" }, { status: 404 });
   }
+
+  const { data: fontRows } = await supabase.from("fonts").select("key, display_name");
+  const fontKeys = (fontRows ?? []).map((f) => f.key);
+  const fontDescriptions = (fontRows ?? []).map((f) => `${f.key} (${f.display_name})`).join(", ");
 
   const clips = await Promise.all(
     clipVideos.map(async (v) => {
@@ -102,7 +110,8 @@ export async function POST(request: NextRequest) {
   const clipsDescription = clips
     .map((c, i) => {
       const transcriptText = c.words.map((w) => `${w.word}(${w.start.toFixed(2)}s)`).join(" ");
-      return `Clip ${i}: mood=${c.recipe!.mood ?? "none"}, caption_style=${c.recipe!.caption_style ?? "none"}, accent_color=${c.recipe!.accent_color ?? "none"}, existing emphasis moments=${JSON.stringify(c.recipe!.emphasis_moments ?? [])}\nClip ${i} transcript: ${transcriptText || "(no dialogue — silent clip)"}`;
+      const fontMap = (c.recipe!.font_map ?? {}) as Record<string, string>;
+      return `Clip ${i}: mood=${c.recipe!.mood ?? "none"}, caption_style=${c.recipe!.caption_style ?? "none"}, caption_font=${fontMap.caption ?? "airy"}, accent_color=${c.recipe!.accent_color ?? "none"}, existing emphasis moments=${JSON.stringify(c.recipe!.emphasis_moments ?? [])}\nClip ${i} transcript: ${transcriptText || "(no dialogue — silent clip)"}`;
     })
     .join("\n\n");
 
@@ -110,20 +119,20 @@ export async function POST(request: NextRequest) {
 
 Style Kit colors: ${JSON.stringify(STYLE_KIT.colors)}
 Caption styles available: two_layer_headline, karaoke_reveal, static_block
-Callout fonts available: chic (Playfair Display, elegant/quotes), bubbly (Poppins, playful), airy (Public Sans, light/default)
+Fonts available: ${fontDescriptions}
 
 This project has ${clips.length} clips, numbered 0 to ${clips.length - 1} in playback order:
 
 ${clipsDescription}
 
-The user will give you an instruction to update the whole project. Use the update_project_recipe tool. mood/caption_style/accent_color apply to every clip uniformly. For new_emphasis_moments, "word" must exactly match a word from the relevant clip's transcript above (case-insensitive is fine, but use the transcript's spelling), and specify clip_index when you can tell which clip it belongs to.`;
+The user will give you an instruction to update the whole project. Use the update_project_recipe tool. mood/caption_style/caption_font/accent_color apply to every clip uniformly. For new_emphasis_moments, "word" must exactly match a word from the relevant clip's transcript above (case-insensitive is fine, but use the transcript's spelling), and specify clip_index when you can tell which clip it belongs to.`;
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-5",
     max_tokens: 1024,
     system: systemPrompt,
     messages: [{ role: "user", content: prompt }],
-    tools: [UPDATE_PROJECT_TOOL],
+    tools: [buildTool(fontKeys)],
     tool_choice: { type: "tool", name: "update_project_recipe" },
   });
 
@@ -135,11 +144,13 @@ The user will give you an instruction to update the whole project. Use the updat
   const patch = toolUse.input as {
     mood?: string;
     caption_style?: string;
+    caption_font?: string;
     accent_color?: string;
     new_emphasis_moments?: {
       word: string;
       clip_index?: number;
       treatment: "punch_in_zoom" | "keyword_callout" | "both";
+      zoomLevel?: number;
       calloutText?: string;
       calloutFont?: string;
       calloutColor?: string;
@@ -152,6 +163,7 @@ The user will give you an instruction to update the whole project. Use the updat
   for (const clip of clips) {
     const recipe = clip.recipe!;
     const clipIndex = clips.indexOf(clip);
+    const currentFontMap = (recipe.font_map ?? {}) as Record<string, string>;
 
     const momentsForClip = newMoments.filter((m) => {
       if (m.clip_index !== undefined) return m.clip_index === clipIndex;
@@ -171,7 +183,7 @@ The user will give you an instruction to update the whole project. Use the updat
         treatment: m.treatment,
         source: "prompt" as const,
         approved: true,
-        zoomLevel: 1.18,
+        zoomLevel: m.zoomLevel ?? 1.18,
         calloutText: m.calloutText ?? m.word.toUpperCase(),
         calloutFont: m.calloutFont ?? "airy",
         calloutColor: m.calloutColor ?? STYLE_KIT.colors.yellow,
@@ -186,7 +198,7 @@ The user will give you an instruction to update the whole project. Use the updat
       ],
       mood: patch.mood ?? recipe.mood,
       caption_style: patch.caption_style ?? recipe.caption_style,
-      font_map: recipe.font_map,
+      font_map: { ...currentFontMap, caption: patch.caption_font ?? currentFontMap.caption ?? "airy" },
       cuts: recipe.cuts,
       captions: recipe.captions,
       emphasis_moments: [...(recipe.emphasis_moments ?? []), ...builtMoments],

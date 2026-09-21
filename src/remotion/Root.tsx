@@ -12,9 +12,15 @@ export const defaultProps: VideoCompositionProps = {
       words: [],
       emphasisMoments: [],
       captionStyle: "static_block",
+      captionFont: "airy",
       accentColor: "#FCEF91",
     },
   ],
+  fontMap: {
+    chic: "Playfair Display",
+    bubbly: "Poppins",
+    airy: "Public Sans",
+  },
 };
 
 export const RemotionRoot: React.FC = () => {

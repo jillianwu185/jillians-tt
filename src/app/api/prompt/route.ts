@@ -5,48 +5,52 @@ import { STYLE_KIT } from "@/lib/style-kit";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const UPDATE_RECIPE_TOOL = {
-  name: "update_edit_recipe",
-  description: "Apply the user's requested changes to the video edit recipe.",
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      mood: { type: "string", description: "Overall mood/tone, e.g. 'light and fun'." },
-      caption_style: {
-        type: "string",
-        enum: ["two_layer_headline", "karaoke_reveal", "static_block"],
-      },
-      accent_color: {
-        type: "string",
-        description: "Hex color. Prefer one of the Style Kit colors unless the user asks for something else.",
-      },
-      new_emphasis_moments: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            word: {
-              type: "string",
-              description: "The exact word from the transcript to emphasize (must match a transcript word).",
+function buildTool(fontKeys: string[]) {
+  return {
+    name: "update_edit_recipe",
+    description: "Apply the user's requested changes to the video edit recipe.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        mood: { type: "string", description: "Overall mood/tone, e.g. 'light and fun'." },
+        caption_style: {
+          type: "string",
+          enum: ["two_layer_headline", "karaoke_reveal", "static_block"],
+        },
+        caption_font: { type: "string", enum: fontKeys, description: "Font used for all captions." },
+        accent_color: {
+          type: "string",
+          description: "Hex color. Prefer one of the Style Kit colors unless the user asks for something else.",
+        },
+        new_emphasis_moments: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              word: {
+                type: "string",
+                description: "The exact word from the transcript to emphasize (must match a transcript word).",
+              },
+              treatment: {
+                type: "string",
+                enum: ["punch_in_zoom", "keyword_callout", "both"],
+              },
+              zoomLevel: { type: "number", description: "Zoom scale, e.g. 1.18 for a subtle punch-in, 1.4 for a strong one. Defaults to 1.18." },
+              calloutText: { type: "string", description: "Defaults to the word itself if omitted." },
+              calloutFont: { type: "string", enum: fontKeys },
+              calloutColor: { type: "string", description: "Hex color, defaults to Style Kit yellow." },
             },
-            treatment: {
-              type: "string",
-              enum: ["punch_in_zoom", "keyword_callout", "both"],
-            },
-            calloutText: { type: "string", description: "Defaults to the word itself if omitted." },
-            calloutFont: { type: "string", enum: ["chic", "bubbly", "airy"] },
-            calloutColor: { type: "string", description: "Hex color, defaults to Style Kit yellow." },
+            required: ["word", "treatment"],
           },
-          required: ["word", "treatment"],
+        },
+        reasoning: {
+          type: "string",
+          description: "One or two sentences explaining what changed, shown to the user.",
         },
       },
-      reasoning: {
-        type: "string",
-        description: "One or two sentences explaining what changed, shown to the user.",
-      },
     },
-  },
-};
+  };
+}
 
 export async function POST(request: NextRequest) {
   const { video_id, prompt } = await request.json();
@@ -82,17 +86,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No transcript found" }, { status: 404 });
   }
 
+  const { data: fontRows } = await supabase.from("fonts").select("key, display_name");
+  const fontKeys = (fontRows ?? []).map((f) => f.key);
+  const fontDescriptions = (fontRows ?? []).map((f) => `${f.key} (${f.display_name})`).join(", ");
+
   const transcriptText = (transcript.words as { word: string; start: number }[])
     .map((w) => `${w.word}(${w.start.toFixed(2)}s)`)
     .join(" ");
+
+  const currentFontMap = (recipe.font_map ?? {}) as Record<string, string>;
 
   const systemPrompt = `You are editing a short TikTok video for a single creator using a fixed brand Style Kit.
 
 Style Kit colors: ${JSON.stringify(STYLE_KIT.colors)}
 Caption styles available: two_layer_headline, karaoke_reveal, static_block
-Callout fonts available: chic (Playfair Display, elegant/quotes), bubbly (Poppins, playful), airy (Public Sans, light/default)
+Fonts available: ${fontDescriptions}
 
-Current recipe: mood=${recipe.mood ?? "none"}, caption_style=${recipe.caption_style ?? "none"}, accent_color=${recipe.accent_color ?? "none"}
+Current recipe: mood=${recipe.mood ?? "none"}, caption_style=${recipe.caption_style ?? "none"}, caption_font=${currentFontMap.caption ?? "airy"}, accent_color=${recipe.accent_color ?? "none"}
 Existing emphasis moments: ${JSON.stringify(recipe.emphasis_moments ?? [])}
 
 Full transcript with word timestamps: ${transcriptText}
@@ -104,7 +114,7 @@ The user will give you an instruction to update the edit. Use the update_edit_re
     max_tokens: 1024,
     system: systemPrompt,
     messages: [{ role: "user", content: prompt }],
-    tools: [UPDATE_RECIPE_TOOL],
+    tools: [buildTool(fontKeys)],
     tool_choice: { type: "tool", name: "update_edit_recipe" },
   });
 
@@ -116,10 +126,12 @@ The user will give you an instruction to update the edit. Use the update_edit_re
   const patch = toolUse.input as {
     mood?: string;
     caption_style?: string;
+    caption_font?: string;
     accent_color?: string;
     new_emphasis_moments?: {
       word: string;
       treatment: "punch_in_zoom" | "keyword_callout" | "both";
+      zoomLevel?: number;
       calloutText?: string;
       calloutFont?: string;
       calloutColor?: string;
@@ -139,7 +151,7 @@ The user will give you an instruction to update the edit. Use the update_edit_re
       treatment: m.treatment,
       source: "prompt" as const,
       approved: true,
-      zoomLevel: 1.18,
+      zoomLevel: m.zoomLevel ?? 1.18,
       calloutText: m.calloutText ?? m.word.toUpperCase(),
       calloutFont: m.calloutFont ?? "airy",
       calloutColor: m.calloutColor ?? STYLE_KIT.colors.yellow,
@@ -154,7 +166,7 @@ The user will give you an instruction to update the edit. Use the update_edit_re
     ],
     mood: patch.mood ?? recipe.mood,
     caption_style: patch.caption_style ?? recipe.caption_style,
-    font_map: recipe.font_map,
+    font_map: { ...currentFontMap, caption: patch.caption_font ?? currentFontMap.caption ?? "airy" },
     cuts: recipe.cuts,
     captions: recipe.captions,
     emphasis_moments: [...(recipe.emphasis_moments ?? []), ...newMoments],

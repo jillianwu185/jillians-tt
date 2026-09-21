@@ -5,21 +5,11 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { loadFont as loadPoppins } from "@remotion/google-fonts/Poppins";
-import { loadFont as loadPlayfair } from "@remotion/google-fonts/PlayfairDisplay";
-import { loadFont as loadPublicSans } from "@remotion/google-fonts/PublicSans";
+import { useDynamicGoogleFonts } from "./dynamicFonts";
 import { computeKeptSegments, mapSourceTimeToOutputTime, totalOutputDuration, type KeptSegment } from "./timeline";
 import { buildCaptionChunks, type TranscriptWord, type CaptionChunk } from "./captions";
 
-const { fontFamily: poppinsFamily } = loadPoppins();
-const { fontFamily: playfairFamily } = loadPlayfair();
-const { fontFamily: publicSansFamily } = loadPublicSans();
-
-const FONT_FAMILIES: Record<string, string> = {
-  chic: playfairFamily,
-  bubbly: poppinsFamily,
-  airy: publicSansFamily,
-};
+const FALLBACK_FONT_FAMILY = "Public Sans";
 
 export type EmphasisMomentProps = {
   word: string;
@@ -41,11 +31,13 @@ export type ClipInput = {
   words: TranscriptWord[];
   emphasisMoments: EmphasisMomentProps[];
   captionStyle: CaptionStyle;
+  captionFont: string;
   accentColor: string;
 };
 
 export type VideoCompositionProps = {
   clips: ClipInput[];
+  fontMap: Record<string, string>;
 };
 
 type ClipTimeline = {
@@ -66,14 +58,30 @@ export function computeProjectTimeline(clips: ClipInput[]): ClipTimeline[] {
   });
 }
 
-export function VideoComposition({ clips }: VideoCompositionProps) {
+export function VideoComposition({ clips, fontMap }: VideoCompositionProps) {
+  const usedFontKeys = new Set<string>();
+  for (const clip of clips) {
+    usedFontKeys.add(clip.captionFont);
+    for (const m of clip.emphasisMoments) usedFontKeys.add(m.calloutFont);
+  }
+  const usedFamilies = Array.from(usedFontKeys).map((key) => fontMap[key] ?? FALLBACK_FONT_FAMILY);
+  useDynamicGoogleFonts(usedFamilies);
+
+  function resolveFont(key: string): string {
+    return fontMap[key] ?? FALLBACK_FONT_FAMILY;
+  }
+
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const outputTime = frame / fps;
 
   const timeline = computeProjectTimeline(clips);
 
-  const allCaptionChunks: (CaptionChunk & { captionStyle: CaptionStyle; accentColor: string })[] = [];
+  const allCaptionChunks: (CaptionChunk & {
+    captionStyle: CaptionStyle;
+    accentColor: string;
+    captionFontFamily: string;
+  })[] = [];
   const allEmphasis: EmphasisMomentProps[] = [];
 
   for (const { clip, keptSegments, offset } of timeline) {
@@ -86,6 +94,7 @@ export function VideoComposition({ clips }: VideoCompositionProps) {
         words: chunk.words.map((w) => ({ ...w, start: w.start + offset, end: w.end + offset })),
         captionStyle: clip.captionStyle,
         accentColor: clip.accentColor,
+        captionFontFamily: resolveFont(clip.captionFont),
       });
     }
 
@@ -139,6 +148,7 @@ export function VideoComposition({ clips }: VideoCompositionProps) {
           outputTime={outputTime}
           style={activeCaption.captionStyle}
           accentColor={activeCaption.accentColor}
+          fontFamily={activeCaption.captionFontFamily}
         />
       )}
 
@@ -148,7 +158,7 @@ export function VideoComposition({ clips }: VideoCompositionProps) {
         >
           <div
             style={{
-              fontFamily: FONT_FAMILIES[activeEmphasis.calloutFont] ?? publicSansFamily,
+              fontFamily: resolveFont(activeEmphasis.calloutFont),
               fontSize: 140,
               fontWeight: 800,
               color: activeEmphasis.calloutColor,
@@ -170,11 +180,13 @@ function Captions({
   outputTime,
   style,
   accentColor,
+  fontFamily,
 }: {
   chunk: { text: string; words: { word: string; start: number; end: number }[] };
   outputTime: number;
   style: CaptionStyle;
   accentColor: string;
+  fontFamily: string;
 }) {
   const base: React.CSSProperties = {
     position: "absolute",
@@ -182,7 +194,7 @@ function Captions({
     left: "5%",
     right: "5%",
     textAlign: "center",
-    fontFamily: publicSansFamily,
+    fontFamily,
     fontSize: 56,
     fontWeight: 700,
     color: "#FFFFFF",

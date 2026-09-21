@@ -24,7 +24,7 @@ async function buildClipInput(
 
   const { data: recipe, error: recipeError } = await supabase
     .from("edit_recipes")
-    .select("id, cuts, emphasis_moments, caption_style, accent_color")
+    .select("id, cuts, emphasis_moments, caption_style, accent_color, font_map")
     .eq("video_id", videoId)
     .order("version", { ascending: false })
     .limit(1)
@@ -57,6 +57,7 @@ async function buildClipInput(
       words: transcript.words,
       emphasisMoments: approvedEmphasis,
       captionStyle: recipe.caption_style ?? "static_block",
+      captionFont: (recipe.font_map as Record<string, string> | null)?.caption ?? "airy",
       accentColor: recipe.accent_color ?? "#FCEF91",
     },
   };
@@ -101,12 +102,16 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  const { data: fontRows } = await supabase.from("fonts").select("key, google_font_family");
+  const fontMap: Record<string, string> = {};
+  for (const f of fontRows ?? []) fontMap[f.key] = f.google_font_family;
+
   const { renderId, bucketName } = await renderMediaOnLambda({
     region: REGION,
     functionName: FUNCTION_NAME,
     serveUrl: SERVE_URL,
     composition: "EditedVideo",
-    inputProps: { clips },
+    inputProps: { clips, fontMap },
     codec: "h264",
     crf: 28,
     framesPerLambda: 3000,
