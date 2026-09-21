@@ -6,6 +6,22 @@ import ffmpegPath from "ffmpeg-static";
 
 const SAMPLE_RATE = 16000;
 
+function runFfmpeg(args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(ffmpegPath as string, args);
+    let stderr = "";
+    proc.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    proc.on("error", reject);
+    proc.on("close", (code) =>
+      code === 0
+        ? resolve()
+        : reject(new Error(`ffmpeg exited ${code}: ${stderr.slice(-2000)}`))
+    );
+  });
+}
+
 export type WordTiming = { word: string; start: number; end: number };
 
 export type WordAudioFeatures = WordTiming & {
@@ -21,24 +37,20 @@ async function extractPcm(videoBuffer: Buffer): Promise<Int16Array> {
   try {
     await writeFile(inputPath, videoBuffer);
 
-    await new Promise<void>((resolve, reject) => {
-      const proc = spawn(ffmpegPath as string, [
-        "-y",
-        "-i",
-        inputPath,
-        "-f",
-        "s16le",
-        "-acodec",
-        "pcm_s16le",
-        "-ac",
-        "1",
-        "-ar",
-        String(SAMPLE_RATE),
-        outputPath,
-      ]);
-      proc.on("error", reject);
-      proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`))));
-    });
+    await runFfmpeg([
+      "-y",
+      "-i",
+      inputPath,
+      "-f",
+      "s16le",
+      "-acodec",
+      "pcm_s16le",
+      "-ac",
+      "1",
+      "-ar",
+      String(SAMPLE_RATE),
+      outputPath,
+    ]);
 
     const raw = await readFile(outputPath);
     return new Int16Array(raw.buffer, raw.byteOffset, raw.length / 2);
@@ -94,23 +106,19 @@ export async function extractCompressedAudio(videoBuffer: Buffer): Promise<Buffe
   try {
     await writeFile(inputPath, videoBuffer);
 
-    await new Promise<void>((resolve, reject) => {
-      const proc = spawn(ffmpegPath as string, [
-        "-y",
-        "-i",
-        inputPath,
-        "-vn",
-        "-acodec",
-        "libmp3lame",
-        "-ac",
-        "1",
-        "-b:a",
-        "64k",
-        outputPath,
-      ]);
-      proc.on("error", reject);
-      proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`))));
-    });
+    await runFfmpeg([
+      "-y",
+      "-i",
+      inputPath,
+      "-vn",
+      "-acodec",
+      "libmp3lame",
+      "-ac",
+      "1",
+      "-b:a",
+      "64k",
+      outputPath,
+    ]);
 
     return await readFile(outputPath);
   } finally {
