@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/client";
 
 type Status = "idle" | "uploading" | "transcribing" | "error";
 
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+
 export default function StudioPage() {
   const router = useRouter();
   const [status, setStatus] = useState<Status>("idle");
@@ -26,6 +28,14 @@ export default function StudioPage() {
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      setErrorMessage(
+        `This file is ${(file.size / 1024 / 1024).toFixed(0)}MB — Supabase's free plan caps uploads at 50MB. Try a shorter clip or lower export quality.`
+      );
+      setStatus("error");
+      return;
+    }
 
     setStatus("uploading");
     setErrorMessage("");
