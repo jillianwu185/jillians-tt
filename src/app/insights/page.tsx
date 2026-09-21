@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import SyncButton from "@/app/insights/SyncButton";
 import ImportForm from "@/app/insights/ImportForm";
+import RetentionChart from "@/app/insights/RetentionChart";
 
 export default async function InsightsPage() {
   const supabase = await createClient();
@@ -83,10 +84,13 @@ export default async function InsightsPage() {
         </p>
         <ImportForm />
         {latestImport && (
-          <p className="mt-3 text-sm text-neutral-500">
-            Last import: {latestImport.date_range_start} to {latestImport.date_range_end} (
-            {(latestImport.raw_csv_data as unknown[]).length} rows)
-          </p>
+          <div className="mt-4">
+            <p className="mb-3 text-sm text-neutral-500">
+              Last import: {latestImport.date_range_start} to {latestImport.date_range_end} (
+              {(latestImport.raw_csv_data as Record<string, string>[]).length} rows)
+            </p>
+            <RetentionChart rows={latestImport.raw_csv_data as Record<string, string>[]} />
+          </div>
         )}
       </section>
     </main>
