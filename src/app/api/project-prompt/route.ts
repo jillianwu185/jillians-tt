@@ -19,6 +19,10 @@ function buildTool(fontKeys: string[]) {
           description: "Applied to every clip in the project.",
         },
         caption_font: { type: "string", enum: fontKeys, description: "Font for captions, applied to every clip." },
+        caption_size_multiplier: {
+          type: "number",
+          description: "Scales caption text size relative to the default (1.0), applied to every clip.",
+        },
         accent_color: {
           type: "string",
           description: "Hex color, applied to every clip. Prefer a Style Kit color unless asked otherwise.",
@@ -44,6 +48,7 @@ function buildTool(fontKeys: string[]) {
               zoomLevel: { type: "number", description: "Zoom scale, e.g. 1.18 subtle, 1.4 strong. Defaults to 1.18." },
               calloutText: { type: "string", description: "Defaults to the word itself if omitted." },
               calloutFont: { type: "string", enum: fontKeys },
+              calloutFontSize: { type: "number", description: "Pixel size of the callout text. Defaults to 140." },
               calloutColor: { type: "string", description: "Hex color, defaults to Style Kit yellow." },
             },
             required: ["word", "treatment"],
@@ -110,8 +115,8 @@ export async function POST(request: NextRequest) {
   const clipsDescription = clips
     .map((c, i) => {
       const transcriptText = c.words.map((w) => `${w.word}(${w.start.toFixed(2)}s)`).join(" ");
-      const fontMap = (c.recipe!.font_map ?? {}) as Record<string, string>;
-      return `Clip ${i}: mood=${c.recipe!.mood ?? "none"}, caption_style=${c.recipe!.caption_style ?? "none"}, caption_font=${fontMap.caption ?? "airy"}, accent_color=${c.recipe!.accent_color ?? "none"}, existing emphasis moments=${JSON.stringify(c.recipe!.emphasis_moments ?? [])}\nClip ${i} transcript: ${transcriptText || "(no dialogue — silent clip)"}`;
+      const fontMap = (c.recipe!.font_map ?? {}) as Record<string, string | number>;
+      return `Clip ${i}: mood=${c.recipe!.mood ?? "none"}, caption_style=${c.recipe!.caption_style ?? "none"}, caption_font=${fontMap.caption ?? "airy"}, caption_size_multiplier=${fontMap.captionSizeMultiplier ?? 1}, accent_color=${c.recipe!.accent_color ?? "none"}, existing emphasis moments=${JSON.stringify(c.recipe!.emphasis_moments ?? [])}\nClip ${i} transcript: ${transcriptText || "(no dialogue — silent clip)"}`;
     })
     .join("\n\n");
 
@@ -145,6 +150,7 @@ The user will give you an instruction to update the whole project. Use the updat
     mood?: string;
     caption_style?: string;
     caption_font?: string;
+    caption_size_multiplier?: number;
     accent_color?: string;
     new_emphasis_moments?: {
       word: string;
@@ -153,6 +159,7 @@ The user will give you an instruction to update the whole project. Use the updat
       zoomLevel?: number;
       calloutText?: string;
       calloutFont?: string;
+      calloutFontSize?: number;
       calloutColor?: string;
     }[];
     reasoning?: string;
@@ -163,7 +170,7 @@ The user will give you an instruction to update the whole project. Use the updat
   for (const clip of clips) {
     const recipe = clip.recipe!;
     const clipIndex = clips.indexOf(clip);
-    const currentFontMap = (recipe.font_map ?? {}) as Record<string, string>;
+    const currentFontMap = (recipe.font_map ?? {}) as Record<string, string | number>;
 
     const momentsForClip = newMoments.filter((m) => {
       if (m.clip_index !== undefined) return m.clip_index === clipIndex;
@@ -186,6 +193,7 @@ The user will give you an instruction to update the whole project. Use the updat
         zoomLevel: m.zoomLevel ?? 1.18,
         calloutText: m.calloutText ?? m.word.toUpperCase(),
         calloutFont: m.calloutFont ?? "airy",
+        calloutFontSize: m.calloutFontSize ?? 140,
         calloutColor: m.calloutColor ?? STYLE_KIT.colors.yellow,
       };
     });
@@ -198,7 +206,11 @@ The user will give you an instruction to update the whole project. Use the updat
       ],
       mood: patch.mood ?? recipe.mood,
       caption_style: patch.caption_style ?? recipe.caption_style,
-      font_map: { ...currentFontMap, caption: patch.caption_font ?? currentFontMap.caption ?? "airy" },
+      font_map: {
+        ...currentFontMap,
+        caption: patch.caption_font ?? currentFontMap.caption ?? "airy",
+        captionSizeMultiplier: patch.caption_size_multiplier ?? currentFontMap.captionSizeMultiplier ?? 1,
+      },
       cuts: recipe.cuts,
       captions: recipe.captions,
       emphasis_moments: [...(recipe.emphasis_moments ?? []), ...builtMoments],

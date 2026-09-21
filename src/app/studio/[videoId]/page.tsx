@@ -23,6 +23,7 @@ type EmphasisMoment = {
   zoomLevel: number;
   calloutText: string;
   calloutFont: string;
+  calloutFontSize: number;
   calloutColor: string;
   [key: string]: unknown;
 };
@@ -48,6 +49,7 @@ export default function ReviewPage() {
 
   const [captionStyle, setCaptionStyle] = useState<string>("static_block");
   const [captionFont, setCaptionFont] = useState<string>("airy");
+  const [captionSizeMultiplier, setCaptionSizeMultiplier] = useState<number>(1);
   const [accentColor, setAccentColor] = useState<string>(STYLE_KIT.colors.yellow);
   const [fonts, setFonts] = useState<Font[]>([]);
   const [newFontName, setNewFontName] = useState("");
@@ -104,10 +106,17 @@ export default function ReviewPage() {
     if (recipe) {
       setRecipeId(recipe.id);
       setCuts(recipe.cuts ?? []);
-      setEmphasisMoments(recipe.emphasis_moments ?? []);
+      setEmphasisMoments(
+        (recipe.emphasis_moments ?? []).map((m: Partial<EmphasisMoment>) => ({
+          calloutFontSize: 140,
+          ...m,
+        })) as EmphasisMoment[]
+      );
       setCaptionStyle(recipe.caption_style ?? "static_block");
       setAccentColor(recipe.accent_color ?? STYLE_KIT.colors.yellow);
-      setCaptionFont((recipe.font_map as Record<string, string> | null)?.caption ?? "airy");
+      const fontMap = (recipe.font_map as Record<string, string | number> | null) ?? {};
+      setCaptionFont((fontMap.caption as string) ?? "airy");
+      setCaptionSizeMultiplier((fontMap.captionSizeMultiplier as number) ?? 1);
     }
   }
 
@@ -196,7 +205,7 @@ export default function ReviewPage() {
         emphasis_moments: emphasisMoments,
         caption_style: captionStyle,
         accent_color: accentColor,
-        font_map: { caption: captionFont },
+        font_map: { caption: captionFont, captionSizeMultiplier },
       })
       .eq("id", recipeId);
     if (!error) {
@@ -337,18 +346,30 @@ export default function ReviewPage() {
           ))}
         </div>
 
-        <p className="mb-2 text-sm font-medium text-neutral-700">Caption font</p>
-        <select
-          value={captionFont}
-          onChange={(e) => setCaptionFont(e.target.value)}
-          className="mb-4 rounded border border-neutral-300 px-2 py-1.5 text-sm"
-        >
-          {fonts.map((f) => (
-            <option key={f.key} value={f.key}>
-              {f.display_name}
-            </option>
-          ))}
-        </select>
+        <p className="mb-2 text-sm font-medium text-neutral-700">Caption font & size</p>
+        <div className="mb-4 flex items-center gap-3">
+          <select
+            value={captionFont}
+            onChange={(e) => setCaptionFont(e.target.value)}
+            className="rounded border border-neutral-300 px-2 py-1.5 text-sm"
+          >
+            {fonts.map((f) => (
+              <option key={f.key} value={f.key}>
+                {f.display_name}
+              </option>
+            ))}
+          </select>
+          <input
+            type="range"
+            min={0.5}
+            max={2}
+            step={0.1}
+            value={captionSizeMultiplier}
+            onChange={(e) => setCaptionSizeMultiplier(parseFloat(e.target.value))}
+            className="w-32"
+          />
+          <span className="text-xs text-neutral-500">{captionSizeMultiplier.toFixed(1)}x</span>
+        </div>
 
         <p className="mb-2 text-sm font-medium text-neutral-700">Accent color</p>
         <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -504,6 +525,18 @@ export default function ReviewPage() {
                         </option>
                       ))}
                     </select>
+                    <label className="flex items-center gap-1 text-xs text-neutral-500">
+                      size
+                      <input
+                        type="number"
+                        step={10}
+                        min={40}
+                        max={300}
+                        value={m.calloutFontSize}
+                        onChange={(e) => updateEmphasis(i, { calloutFontSize: parseFloat(e.target.value) })}
+                        className="w-16 rounded border border-neutral-300 px-1.5 py-1"
+                      />
+                    </label>
                     <input
                       type="color"
                       value={m.calloutColor}

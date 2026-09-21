@@ -20,6 +20,7 @@ export type EmphasisMomentProps = {
   calloutText: string;
   calloutFont: string;
   calloutColor: string;
+  calloutFontSize: number;
 };
 
 export type CaptionStyle = "two_layer_headline" | "karaoke_reveal" | "static_block";
@@ -32,6 +33,7 @@ export type ClipInput = {
   emphasisMoments: EmphasisMomentProps[];
   captionStyle: CaptionStyle;
   captionFont: string;
+  captionSizeMultiplier: number;
   accentColor: string;
 };
 
@@ -81,6 +83,7 @@ export function VideoComposition({ clips, fontMap }: VideoCompositionProps) {
     captionStyle: CaptionStyle;
     accentColor: string;
     captionFontFamily: string;
+    captionSizeMultiplier: number;
   })[] = [];
   const allEmphasis: EmphasisMomentProps[] = [];
 
@@ -95,6 +98,7 @@ export function VideoComposition({ clips, fontMap }: VideoCompositionProps) {
         captionStyle: clip.captionStyle,
         accentColor: clip.accentColor,
         captionFontFamily: resolveFont(clip.captionFont),
+        captionSizeMultiplier: clip.captionSizeMultiplier,
       });
     }
 
@@ -149,6 +153,7 @@ export function VideoComposition({ clips, fontMap }: VideoCompositionProps) {
           style={activeCaption.captionStyle}
           accentColor={activeCaption.accentColor}
           fontFamily={activeCaption.captionFontFamily}
+          sizeMultiplier={activeCaption.captionSizeMultiplier}
         />
       )}
 
@@ -159,7 +164,7 @@ export function VideoComposition({ clips, fontMap }: VideoCompositionProps) {
           <div
             style={{
               fontFamily: resolveFont(activeEmphasis.calloutFont),
-              fontSize: 140,
+              fontSize: activeEmphasis.calloutFontSize,
               fontWeight: 800,
               color: activeEmphasis.calloutColor,
               textAlign: "center",
@@ -181,12 +186,14 @@ function Captions({
   style,
   accentColor,
   fontFamily,
+  sizeMultiplier,
 }: {
   chunk: { text: string; words: { word: string; start: number; end: number }[] };
   outputTime: number;
   style: CaptionStyle;
   accentColor: string;
   fontFamily: string;
+  sizeMultiplier: number;
 }) {
   const base: React.CSSProperties = {
     position: "absolute",
@@ -195,7 +202,7 @@ function Captions({
     right: "5%",
     textAlign: "center",
     fontFamily,
-    fontSize: 56,
+    fontSize: 56 * sizeMultiplier,
     fontWeight: 700,
     color: "#FFFFFF",
   };
@@ -234,8 +241,8 @@ function Captions({
   const [first, ...rest] = chunk.text.split(" ");
   return (
     <div style={base}>
-      <div style={{ fontSize: 72, fontWeight: 800, marginBottom: 8 }}>{first}</div>
-      <div style={{ fontSize: 44, fontWeight: 500 }}>{rest.join(" ")}</div>
+      <div style={{ fontSize: 72 * sizeMultiplier, fontWeight: 800, marginBottom: 8 }}>{first}</div>
+      <div style={{ fontSize: 44 * sizeMultiplier, fontWeight: 500 }}>{rest.join(" ")}</div>
     </div>
   );
 }

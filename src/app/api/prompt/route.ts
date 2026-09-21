@@ -18,6 +18,10 @@ function buildTool(fontKeys: string[]) {
           enum: ["two_layer_headline", "karaoke_reveal", "static_block"],
         },
         caption_font: { type: "string", enum: fontKeys, description: "Font used for all captions." },
+        caption_size_multiplier: {
+          type: "number",
+          description: "Scales caption text size relative to the default (1.0). E.g. 1.3 for bigger, 0.8 for smaller.",
+        },
         accent_color: {
           type: "string",
           description: "Hex color. Prefer one of the Style Kit colors unless the user asks for something else.",
@@ -38,6 +42,7 @@ function buildTool(fontKeys: string[]) {
               zoomLevel: { type: "number", description: "Zoom scale, e.g. 1.18 for a subtle punch-in, 1.4 for a strong one. Defaults to 1.18." },
               calloutText: { type: "string", description: "Defaults to the word itself if omitted." },
               calloutFont: { type: "string", enum: fontKeys },
+              calloutFontSize: { type: "number", description: "Pixel size of the callout text. Defaults to 140." },
               calloutColor: { type: "string", description: "Hex color, defaults to Style Kit yellow." },
             },
             required: ["word", "treatment"],
@@ -94,7 +99,7 @@ export async function POST(request: NextRequest) {
     .map((w) => `${w.word}(${w.start.toFixed(2)}s)`)
     .join(" ");
 
-  const currentFontMap = (recipe.font_map ?? {}) as Record<string, string>;
+  const currentFontMap = (recipe.font_map ?? {}) as Record<string, string | number>;
 
   const systemPrompt = `You are editing a short TikTok video for a single creator using a fixed brand Style Kit.
 
@@ -102,7 +107,7 @@ Style Kit colors: ${JSON.stringify(STYLE_KIT.colors)}
 Caption styles available: two_layer_headline, karaoke_reveal, static_block
 Fonts available: ${fontDescriptions}
 
-Current recipe: mood=${recipe.mood ?? "none"}, caption_style=${recipe.caption_style ?? "none"}, caption_font=${currentFontMap.caption ?? "airy"}, accent_color=${recipe.accent_color ?? "none"}
+Current recipe: mood=${recipe.mood ?? "none"}, caption_style=${recipe.caption_style ?? "none"}, caption_font=${currentFontMap.caption ?? "airy"}, caption_size_multiplier=${currentFontMap.captionSizeMultiplier ?? 1}, accent_color=${recipe.accent_color ?? "none"}
 Existing emphasis moments: ${JSON.stringify(recipe.emphasis_moments ?? [])}
 
 Full transcript with word timestamps: ${transcriptText}
@@ -127,6 +132,7 @@ The user will give you an instruction to update the edit. Use the update_edit_re
     mood?: string;
     caption_style?: string;
     caption_font?: string;
+    caption_size_multiplier?: number;
     accent_color?: string;
     new_emphasis_moments?: {
       word: string;
@@ -134,6 +140,7 @@ The user will give you an instruction to update the edit. Use the update_edit_re
       zoomLevel?: number;
       calloutText?: string;
       calloutFont?: string;
+      calloutFontSize?: number;
       calloutColor?: string;
     }[];
     reasoning?: string;
@@ -154,6 +161,7 @@ The user will give you an instruction to update the edit. Use the update_edit_re
       zoomLevel: m.zoomLevel ?? 1.18,
       calloutText: m.calloutText ?? m.word.toUpperCase(),
       calloutFont: m.calloutFont ?? "airy",
+      calloutFontSize: m.calloutFontSize ?? 140,
       calloutColor: m.calloutColor ?? STYLE_KIT.colors.yellow,
     };
   });
@@ -166,7 +174,11 @@ The user will give you an instruction to update the edit. Use the update_edit_re
     ],
     mood: patch.mood ?? recipe.mood,
     caption_style: patch.caption_style ?? recipe.caption_style,
-    font_map: { ...currentFontMap, caption: patch.caption_font ?? currentFontMap.caption ?? "airy" },
+    font_map: {
+      ...currentFontMap,
+      caption: patch.caption_font ?? currentFontMap.caption ?? "airy",
+      captionSizeMultiplier: patch.caption_size_multiplier ?? currentFontMap.captionSizeMultiplier ?? 1,
+    },
     cuts: recipe.cuts,
     captions: recipe.captions,
     emphasis_moments: [...(recipe.emphasis_moments ?? []), ...newMoments],

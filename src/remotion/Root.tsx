@@ -13,6 +13,7 @@ export const defaultProps: VideoCompositionProps = {
       emphasisMoments: [],
       captionStyle: "static_block",
       captionFont: "airy",
+      captionSizeMultiplier: 1,
       accentColor: "#FCEF91",
     },
   ],

@@ -44,9 +44,11 @@ async function buildClipInput(
   if (signedUrlError || !signedUrlData) return { error: `Could not sign source video URL for ${videoId}` };
 
   const acceptedCuts = (recipe.cuts ?? []).filter((c: { accepted: boolean }) => c.accepted);
-  const approvedEmphasis = (recipe.emphasis_moments ?? []).filter(
-    (m: { approved: boolean }) => m.approved
-  );
+  const approvedEmphasis = (recipe.emphasis_moments ?? [])
+    .filter((m: { approved: boolean }) => m.approved)
+    .map((m: { calloutFontSize?: number }) => ({ calloutFontSize: 140, ...m }));
+
+  const fontMap = (recipe.font_map ?? {}) as Record<string, string | number>;
 
   return {
     editRecipeId: recipe.id,
@@ -57,7 +59,8 @@ async function buildClipInput(
       words: transcript.words,
       emphasisMoments: approvedEmphasis,
       captionStyle: recipe.caption_style ?? "static_block",
-      captionFont: (recipe.font_map as Record<string, string> | null)?.caption ?? "airy",
+      captionFont: (fontMap.caption as string) ?? "airy",
+      captionSizeMultiplier: (fontMap.captionSizeMultiplier as number) ?? 1,
       accentColor: recipe.accent_color ?? "#FCEF91",
     },
   };
