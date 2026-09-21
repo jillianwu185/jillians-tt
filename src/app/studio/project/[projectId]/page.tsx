@@ -21,6 +21,11 @@ export default function ProjectPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [clips, setClips] = useState<Clip[]>([]);
 
+  const [prompt, setPrompt] = useState("");
+  const [promptState, setPromptState] = useState<"idle" | "sending" | "error">("idle");
+  const [promptReasoning, setPromptReasoning] = useState("");
+  const [promptErrorMessage, setPromptErrorMessage] = useState("");
+
   const [renderState, setRenderState] = useState<"idle" | "rendering" | "error">("idle");
   const [renderErrorMessage, setRenderErrorMessage] = useState("");
   const [renderProgress, setRenderProgress] = useState(0);
@@ -83,6 +88,30 @@ export default function ProjectPage() {
 
     await supabase.from("videos").update({ sequence_order: b.sequence_order }).eq("id", a.id);
     await supabase.from("videos").update({ sequence_order: a.sequence_order }).eq("id", b.id);
+  }
+
+  async function handlePromptSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!prompt.trim()) return;
+    setPromptState("sending");
+    setPromptReasoning("");
+    setPromptErrorMessage("");
+    try {
+      const response = await fetch("/api/project-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: projectId, prompt }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Prompt failed");
+
+      setPromptReasoning(result.reasoning ?? "");
+      setPrompt("");
+      setPromptState("idle");
+    } catch (err) {
+      setPromptErrorMessage(err instanceof Error ? err.message : "Prompt failed");
+      setPromptState("error");
+    }
   }
 
   async function handleRender() {
@@ -177,6 +206,32 @@ export default function ProjectPage() {
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="mb-10 border-t border-neutral-200 pt-8">
+        <h2 className="mb-3 text-lg font-medium">Prompter (whole project)</h2>
+        <p className="mb-3 text-sm text-neutral-500">
+          Style changes (mood, caption style, color) apply to every clip. Emphasis requests
+          (&quot;zoom in on X&quot;) search all clips&apos; transcripts for the word.
+        </p>
+        <form onSubmit={handlePromptSubmit} className="flex flex-col gap-3">
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="e.g. make it all light and fun, use karaoke captions everywhere, zoom in on 'independent'"
+            rows={3}
+            className="rounded-md border border-neutral-300 p-3 text-sm"
+          />
+          <button
+            type="submit"
+            disabled={promptState === "sending"}
+            className="self-start rounded-md bg-black px-5 py-2.5 text-white"
+          >
+            {promptState === "sending" ? "Thinking…" : "Send"}
+          </button>
+        </form>
+        {promptReasoning && <p className="mt-3 text-sm text-neutral-600">{promptReasoning}</p>}
+        {promptErrorMessage && <p className="mt-3 text-sm text-red-600">{promptErrorMessage}</p>}
       </section>
 
       <section className="border-t border-neutral-200 pt-8">

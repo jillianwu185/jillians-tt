@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
-
-const STYLE_KIT_COLORS = {
-  yellow: "#FCEF91",
-  pink: "#FFB6C1",
-  blue: "#ccedfc",
-  cream: "#FFFFED",
-  captionWhite: "#FFFFFF",
-};
+import { STYLE_KIT } from "@/lib/style-kit";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -95,7 +88,7 @@ export async function POST(request: NextRequest) {
 
   const systemPrompt = `You are editing a short TikTok video for a single creator using a fixed brand Style Kit.
 
-Style Kit colors: ${JSON.stringify(STYLE_KIT_COLORS)}
+Style Kit colors: ${JSON.stringify(STYLE_KIT.colors)}
 Caption styles available: two_layer_headline, karaoke_reveal, static_block
 Callout fonts available: chic (Playfair Display, elegant/quotes), bubbly (Poppins, playful), airy (Public Sans, light/default)
 
@@ -149,7 +142,7 @@ The user will give you an instruction to update the edit. Use the update_edit_re
       zoomLevel: 1.18,
       calloutText: m.calloutText ?? m.word.toUpperCase(),
       calloutFont: m.calloutFont ?? "airy",
-      calloutColor: m.calloutColor ?? STYLE_KIT_COLORS.yellow,
+      calloutColor: m.calloutColor ?? STYLE_KIT.colors.yellow,
     };
   });
 

@@ -4,4 +4,11 @@ export const STYLE_KIT = {
   emphasisAutoDetectMinGapSeconds: 9,
   emphasisVolumeThresholdDb: 6,
   emphasisPitchThresholdHz: 35,
+  colors: {
+    yellow: "#FCEF91",
+    pink: "#FFB6C1",
+    blue: "#ccedfc",
+    cream: "#FFFFED",
+    captionWhite: "#FFFFFF",
+  },
 };
