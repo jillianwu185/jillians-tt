@@ -9,6 +9,7 @@ const STATUS_LABELS: Record<string, string> = {
   draft_cut: "Ready to review",
   edited: "Reviewed",
   exported: "Exported",
+  assembling: "Assembling",
 };
 
 export default async function StudioPage() {
@@ -16,7 +17,13 @@ export default async function StudioPage() {
   const { data: videos } = await supabase
     .from("videos")
     .select("id, status, uploaded_at, duration_seconds, topic_tag")
+    .is("project_id", null)
     .order("uploaded_at", { ascending: false });
+
+  const { data: projects } = await supabase
+    .from("projects")
+    .select("id, status, created_at, topic_tag")
+    .order("created_at", { ascending: false });
 
   return (
     <main className="mx-auto flex max-w-xl flex-col items-center gap-6 px-6 py-16 text-center">
@@ -24,6 +31,27 @@ export default async function StudioPage() {
       <p className="text-neutral-600">Upload a raw clip to get started.</p>
 
       <UploadWidget />
+
+      {projects && projects.length > 0 && (
+        <section className="w-full text-left">
+          <h2 className="mb-3 text-lg font-medium">Your projects (multi-clip)</h2>
+          <ul className="space-y-2">
+            {projects.map((project) => (
+              <li key={project.id}>
+                <Link
+                  href={`/studio/project/${project.id}`}
+                  className="flex items-center justify-between rounded-md border border-neutral-200 p-3 text-sm hover:bg-neutral-50"
+                >
+                  <span>{project.topic_tag ?? "(untitled project)"}</span>
+                  <span className="text-neutral-500">
+                    {STATUS_LABELS[project.status] ?? project.status}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {videos && videos.length > 0 && (
         <section className="w-full text-left">

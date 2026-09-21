@@ -8,8 +8,8 @@ const FUNCTION_NAME = process.env.REMOTION_LAMBDA_FUNCTION_NAME!;
 const REGION = process.env.REMOTION_LAMBDA_REGION as "us-east-1";
 
 export async function POST(request: NextRequest) {
-  const { video_id, render_id, bucket_name, edit_recipe_id } = await request.json();
-  if (!video_id || !render_id || !bucket_name || !edit_recipe_id) {
+  const { video_id, project_id, render_id, bucket_name, edit_recipe_id } = await request.json();
+  if (!render_id || !bucket_name || (!video_id && !project_id)) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
@@ -56,14 +56,20 @@ export async function POST(request: NextRequest) {
   }
 
   const { error: renderInsertError } = await supabase.from("renders").insert({
-    edit_recipe_id,
+    edit_recipe_id: edit_recipe_id ?? null,
+    project_id: project_id ?? null,
     storage_path: renderStoragePath,
   });
   if (renderInsertError) {
     return NextResponse.json({ done: true, error: renderInsertError.message });
   }
 
-  await supabase.from("videos").update({ status: "exported" }).eq("id", video_id);
+  if (video_id) {
+    await supabase.from("videos").update({ status: "exported" }).eq("id", video_id);
+  }
+  if (project_id) {
+    await supabase.from("projects").update({ status: "exported" }).eq("id", project_id);
+  }
 
   const { data: renderSignedUrl } = await supabase.storage
     .from("renders")

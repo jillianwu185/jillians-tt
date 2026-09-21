@@ -1,17 +1,20 @@
 import { Composition } from "remotion";
-import { VideoComposition, type VideoCompositionProps } from "./Video";
-import { computeKeptSegments, totalOutputDuration } from "./timeline";
+import { VideoComposition, computeProjectTimeline, type VideoCompositionProps } from "./Video";
 
 const FPS = 30;
 
 export const defaultProps: VideoCompositionProps = {
-  videoUrl: "",
-  sourceDurationSeconds: 1,
-  cuts: [],
-  words: [],
-  emphasisMoments: [],
-  captionStyle: "static_block",
-  accentColor: "#FCEF91",
+  clips: [
+    {
+      videoUrl: "",
+      sourceDurationSeconds: 1,
+      cuts: [],
+      words: [],
+      emphasisMoments: [],
+      captionStyle: "static_block",
+      accentColor: "#FCEF91",
+    },
+  ],
 };
 
 export const RemotionRoot: React.FC = () => {
@@ -25,10 +28,10 @@ export const RemotionRoot: React.FC = () => {
       height={1920}
       defaultProps={defaultProps}
       calculateMetadata={async ({ props }) => {
-        const keptSegments = computeKeptSegments(props.sourceDurationSeconds, props.cuts);
-        const outputDuration = totalOutputDuration(keptSegments);
+        const timeline = computeProjectTimeline(props.clips);
+        const totalDuration = timeline.reduce((sum, t) => sum + t.duration, 0);
         return {
-          durationInFrames: Math.max(1, Math.round(outputDuration * FPS)),
+          durationInFrames: Math.max(1, Math.round(totalDuration * FPS)),
         };
       }}
     />

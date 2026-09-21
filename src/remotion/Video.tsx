@@ -8,8 +8,8 @@ import {
 import { loadFont as loadPoppins } from "@remotion/google-fonts/Poppins";
 import { loadFont as loadPlayfair } from "@remotion/google-fonts/PlayfairDisplay";
 import { loadFont as loadPublicSans } from "@remotion/google-fonts/PublicSans";
-import { computeKeptSegments, mapSourceTimeToOutputTime, type KeptSegment } from "./timeline";
-import { buildCaptionChunks, type TranscriptWord } from "./captions";
+import { computeKeptSegments, mapSourceTimeToOutputTime, totalOutputDuration, type KeptSegment } from "./timeline";
+import { buildCaptionChunks, type TranscriptWord, type CaptionChunk } from "./captions";
 
 const { fontFamily: poppinsFamily } = loadPoppins();
 const { fontFamily: playfairFamily } = loadPlayfair();
@@ -32,47 +32,74 @@ export type EmphasisMomentProps = {
   calloutColor: string;
 };
 
-export type VideoCompositionProps = {
+export type CaptionStyle = "two_layer_headline" | "karaoke_reveal" | "static_block";
+
+export type ClipInput = {
   videoUrl: string;
   sourceDurationSeconds: number;
   cuts: { start: number; end: number }[];
   words: TranscriptWord[];
   emphasisMoments: EmphasisMomentProps[];
-  captionStyle: "two_layer_headline" | "karaoke_reveal" | "static_block";
+  captionStyle: CaptionStyle;
   accentColor: string;
 };
 
-export function VideoComposition({
-  videoUrl,
-  sourceDurationSeconds,
-  cuts,
-  words,
-  emphasisMoments,
-  captionStyle,
-  accentColor,
-}: VideoCompositionProps) {
+export type VideoCompositionProps = {
+  clips: ClipInput[];
+};
+
+type ClipTimeline = {
+  clip: ClipInput;
+  keptSegments: KeptSegment[];
+  duration: number;
+  offset: number;
+};
+
+export function computeProjectTimeline(clips: ClipInput[]): ClipTimeline[] {
+  let cumulative = 0;
+  return clips.map((clip) => {
+    const keptSegments = computeKeptSegments(clip.sourceDurationSeconds, clip.cuts);
+    const duration = totalOutputDuration(keptSegments);
+    const offset = cumulative;
+    cumulative += duration;
+    return { clip, keptSegments, duration, offset };
+  });
+}
+
+export function VideoComposition({ clips }: VideoCompositionProps) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const outputTime = frame / fps;
 
-  const keptSegments: KeptSegment[] = computeKeptSegments(sourceDurationSeconds, cuts);
-  const captionChunks = buildCaptionChunks(words, keptSegments);
+  const timeline = computeProjectTimeline(clips);
 
-  const activeCaption = captionChunks.find(
-    (c) => outputTime >= c.start && outputTime < c.end
-  );
+  const allCaptionChunks: (CaptionChunk & { captionStyle: CaptionStyle; accentColor: string })[] = [];
+  const allEmphasis: EmphasisMomentProps[] = [];
 
-  const mappedEmphasis = emphasisMoments
-    .map((m) => {
-      const start = mapSourceTimeToOutputTime(m.start, keptSegments);
-      const end = mapSourceTimeToOutputTime(m.end, keptSegments);
-      return start !== null && end !== null ? { ...m, start, end } : null;
-    })
-    .filter((m): m is EmphasisMomentProps => m !== null);
+  for (const { clip, keptSegments, offset } of timeline) {
+    const localChunks = buildCaptionChunks(clip.words, keptSegments);
+    for (const chunk of localChunks) {
+      allCaptionChunks.push({
+        ...chunk,
+        start: chunk.start + offset,
+        end: chunk.end + offset,
+        words: chunk.words.map((w) => ({ ...w, start: w.start + offset, end: w.end + offset })),
+        captionStyle: clip.captionStyle,
+        accentColor: clip.accentColor,
+      });
+    }
 
-  const activeEmphasis = mappedEmphasis.find(
-    (m) => outputTime >= m.start && outputTime < m.end
-  );
+    for (const m of clip.emphasisMoments) {
+      const localStart = mapSourceTimeToOutputTime(m.start, keptSegments);
+      const localEnd = mapSourceTimeToOutputTime(m.end, keptSegments);
+      if (localStart !== null && localEnd !== null) {
+        allEmphasis.push({ ...m, start: localStart + offset, end: localEnd + offset });
+      }
+    }
+  }
+
+  const activeCaption = allCaptionChunks.find((c) => outputTime >= c.start && outputTime < c.end);
+  const activeEmphasis = allEmphasis.find((m) => outputTime >= m.start && outputTime < m.end);
 
   const isZooming =
     activeEmphasis?.treatment === "punch_in_zoom" || activeEmphasis?.treatment === "both";
@@ -86,27 +113,32 @@ export function VideoComposition({
           transform: isZooming ? `scale(${activeEmphasis!.zoomLevel})` : "scale(1)",
         }}
       >
-        {keptSegments.map((seg, i) => {
-          const fromFrame = Math.round(seg.outputStart * fps);
-          const durationInFrames = Math.max(1, Math.round((seg.outputEnd - seg.outputStart) * fps));
-          return (
-            <Sequence key={i} from={fromFrame} durationInFrames={durationInFrames}>
-              <OffthreadVideo
-                src={videoUrl}
-                startFrom={Math.round(seg.sourceStart * fps)}
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              />
-            </Sequence>
-          );
-        })}
+        {timeline.map(({ clip, keptSegments, offset }, clipIndex) =>
+          keptSegments.map((seg, segIndex) => {
+            const fromFrame = Math.round((offset + seg.outputStart) * fps);
+            const durationInFrames = Math.max(
+              1,
+              Math.round((seg.outputEnd - seg.outputStart) * fps)
+            );
+            return (
+              <Sequence key={`${clipIndex}-${segIndex}`} from={fromFrame} durationInFrames={durationInFrames}>
+                <OffthreadVideo
+                  src={clip.videoUrl}
+                  startFrom={Math.round(seg.sourceStart * fps)}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              </Sequence>
+            );
+          })
+        )}
       </AbsoluteFill>
 
       {activeCaption && (
         <Captions
           chunk={activeCaption}
           outputTime={outputTime}
-          style={captionStyle}
-          accentColor={accentColor}
+          style={activeCaption.captionStyle}
+          accentColor={activeCaption.accentColor}
         />
       )}
 
@@ -141,7 +173,7 @@ function Captions({
 }: {
   chunk: { text: string; words: { word: string; start: number; end: number }[] };
   outputTime: number;
-  style: VideoCompositionProps["captionStyle"];
+  style: CaptionStyle;
   accentColor: string;
 }) {
   const base: React.CSSProperties = {
