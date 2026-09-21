@@ -41,11 +41,32 @@ export default function ReviewPage() {
   const [promptReasoning, setPromptReasoning] = useState("");
 
   const [renderState, setRenderState] = useState<"idle" | "rendering" | "error">("idle");
-  const [renderUrl, setRenderUrl] = useState("");
   const [renderErrorMessage, setRenderErrorMessage] = useState("");
   const [renderProgress, setRenderProgress] = useState(0);
+  const [pastRenders, setPastRenders] = useState<{ id: string; rendered_at: string; url: string }[]>([]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  async function loadPastRenders() {
+    const supabase = createClient();
+    const { data: renders } = await supabase
+      .from("renders")
+      .select("id, storage_path, rendered_at, edit_recipes!inner(video_id)")
+      .eq("edit_recipes.video_id", videoId)
+      .order("rendered_at", { ascending: false });
+
+    if (!renders) return;
+
+    const withUrls = await Promise.all(
+      renders.map(async (r) => {
+        const { data: signed } = await supabase.storage
+          .from("renders")
+          .createSignedUrl(r.storage_path, 3600);
+        return { id: r.id, rendered_at: r.rendered_at, url: signed?.signedUrl ?? "" };
+      })
+    );
+    setPastRenders(withUrls);
+  }
 
   async function reloadRecipe() {
     const supabase = createClient();
@@ -85,6 +106,7 @@ export default function ReviewPage() {
       if (signedUrlData) setVideoUrl(signedUrlData.signedUrl);
 
       await reloadRecipe();
+      await loadPastRenders();
       setLoadState("ready");
     }
     load();
@@ -180,8 +202,8 @@ export default function ReviewPage() {
 
         if (statusResult.done) {
           if (statusResult.error) throw new Error(statusResult.error);
-          setRenderUrl(statusResult.url);
           setRenderState("idle");
+          await loadPastRenders();
           return;
         }
         setRenderProgress(statusResult.overallProgress ?? 0);
@@ -357,8 +379,23 @@ export default function ReviewPage() {
         {renderErrorMessage && (
           <p className="mt-3 text-sm text-red-600">{renderErrorMessage}</p>
         )}
-        {renderUrl && (
-          <video src={renderUrl} controls className="mt-4 w-full rounded-lg" />
+
+        {pastRenders.length > 0 && (
+          <div className="mt-6">
+            <h3 className="mb-3 text-sm font-medium text-neutral-700">
+              Past renders ({pastRenders.length})
+            </h3>
+            <ul className="space-y-4">
+              {pastRenders.map((r) => (
+                <li key={r.id}>
+                  <p className="mb-1 text-xs text-neutral-500">
+                    {new Date(r.rendered_at).toLocaleString()}
+                  </p>
+                  <video src={r.url} controls className="w-full rounded-lg" />
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </section>
     </main>
