@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import UploadWidget from "@/app/studio/UploadWidget";
+import DeleteVideoButton from "@/app/studio/DeleteVideoButton";
 
 const STATUS_LABELS: Record<string, string> = {
   uploaded: "Uploaded",
@@ -29,11 +30,11 @@ export default async function StudioPage() {
           <h2 className="mb-3 text-lg font-medium">Your videos</h2>
           <ul className="space-y-2">
             {videos.map((video) => (
-              <li key={video.id}>
-                <Link
-                  href={`/studio/${video.id}`}
-                  className="flex items-center justify-between rounded-md border border-neutral-200 p-3 text-sm hover:bg-neutral-50"
-                >
+              <li
+                key={video.id}
+                className="flex items-center rounded-md border border-neutral-200 p-3 text-sm hover:bg-neutral-50"
+              >
+                <Link href={`/studio/${video.id}`} className="flex flex-1 items-center justify-between">
                   <span>
                     {video.topic_tag ?? "(untitled)"}
                     <span className="ml-2 text-neutral-400">
@@ -44,6 +45,7 @@ export default async function StudioPage() {
                     {STATUS_LABELS[video.status] ?? video.status}
                   </span>
                 </Link>
+                <DeleteVideoButton videoId={video.id} />
               </li>
             ))}
           </ul>
