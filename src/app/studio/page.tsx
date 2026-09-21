@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import UploadWidget from "@/app/studio/UploadWidget";
 import DeleteVideoButton from "@/app/studio/DeleteVideoButton";
+import DeleteProjectButton from "@/app/studio/DeleteProjectButton";
 
 const STATUS_LABELS: Record<string, string> = {
   uploaded: "Uploaded",
@@ -37,16 +38,20 @@ export default async function StudioPage() {
           <h2 className="mb-3 text-lg font-medium">Your projects (multi-clip)</h2>
           <ul className="space-y-2">
             {projects.map((project) => (
-              <li key={project.id}>
+              <li
+                key={project.id}
+                className="flex items-center rounded-md border border-neutral-200 p-3 text-sm hover:bg-neutral-50"
+              >
                 <Link
                   href={`/studio/project/${project.id}`}
-                  className="flex items-center justify-between rounded-md border border-neutral-200 p-3 text-sm hover:bg-neutral-50"
+                  className="flex flex-1 items-center justify-between"
                 >
                   <span>{project.topic_tag ?? "(untitled project)"}</span>
                   <span className="text-neutral-500">
                     {STATUS_LABELS[project.status] ?? project.status}
                   </span>
                 </Link>
+                <DeleteProjectButton projectId={project.id} />
               </li>
             ))}
           </ul>
