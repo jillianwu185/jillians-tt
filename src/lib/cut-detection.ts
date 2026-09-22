@@ -4,7 +4,7 @@ import type { WordAudioFeatures } from "@/lib/audio-analysis";
 export type Cut = {
   start: number;
   end: number;
-  reason: "filler_word" | "silence";
+  reason: "filler_word" | "silence" | "stutter_or_repeat";
   user_nudged: boolean;
   accepted: boolean;
 };

@@ -22,6 +22,7 @@ export const defaultProps: VideoCompositionProps = {
     bubbly: "Poppins",
     airy: "Public Sans",
   },
+  headerTitle: null,
 };
 
 export const RemotionRoot: React.FC = () => {

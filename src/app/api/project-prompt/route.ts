@@ -215,6 +215,7 @@ The user will give you an instruction to update the whole project. Use the updat
       captions: recipe.captions,
       emphasis_moments: [...(recipe.emphasis_moments ?? []), ...builtMoments],
       accent_color: patch.accent_color ?? recipe.accent_color,
+      header_title: recipe.header_title ?? null,
       version: recipe.version + 1,
     };
 

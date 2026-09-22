@@ -109,6 +109,14 @@ export default function UploadWidget() {
         });
       }
 
+      setProgressLabel("Styling your video…");
+      setStatus("transcribing");
+      await fetch("/api/project-autostyle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: project.id }),
+      }).catch(() => {});
+
       router.push(`/studio/project/${project.id}`);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Upload failed");

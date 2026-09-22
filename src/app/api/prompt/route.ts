@@ -183,6 +183,7 @@ The user will give you an instruction to update the edit. Use the update_edit_re
     captions: recipe.captions,
     emphasis_moments: [...(recipe.emphasis_moments ?? []), ...newMoments],
     accent_color: patch.accent_color ?? recipe.accent_color,
+    header_title: recipe.header_title ?? null,
     version: recipe.version + 1,
   };
 

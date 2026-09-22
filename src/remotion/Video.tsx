@@ -40,6 +40,7 @@ export type ClipInput = {
 export type VideoCompositionProps = {
   clips: ClipInput[];
   fontMap: Record<string, string>;
+  headerTitle?: string | null;
 };
 
 type ClipTimeline = {
@@ -60,7 +61,7 @@ export function computeProjectTimeline(clips: ClipInput[]): ClipTimeline[] {
   });
 }
 
-export function VideoComposition({ clips, fontMap }: VideoCompositionProps) {
+export function VideoComposition({ clips, fontMap, headerTitle }: VideoCompositionProps) {
   const usedFontKeys = new Set<string>();
   for (const clip of clips) {
     usedFontKeys.add(clip.captionFont);
@@ -176,6 +177,56 @@ export function VideoComposition({ clips, fontMap }: VideoCompositionProps) {
           </div>
         </AbsoluteFill>
       )}
+
+      {headerTitle && clips[0] && (
+        <HeaderTitle
+          title={headerTitle}
+          fontFamily={resolveFont(clips[0].captionFont)}
+          accentColor={clips[0].accentColor}
+        />
+      )}
+    </AbsoluteFill>
+  );
+}
+
+function HeaderTitle({
+  title,
+  fontFamily,
+  accentColor,
+}: {
+  title: string;
+  fontFamily: string;
+  accentColor: string;
+}) {
+  return (
+    <AbsoluteFill style={{ alignItems: "center", pointerEvents: "none" }}>
+      <div
+        style={{
+          position: "absolute",
+          top: 140,
+          left: "8%",
+          right: "8%",
+          textAlign: "center",
+          fontFamily,
+          fontSize: 84,
+          fontWeight: 800,
+          color: "#FFFFFF",
+          letterSpacing: 1,
+          textTransform: "uppercase",
+          textShadow: "0 4px 20px rgba(0,0,0,0.45)",
+        }}
+      >
+        {title}
+        <div
+          style={{
+            margin: "14px auto 0",
+            width: 96,
+            height: 6,
+            borderRadius: 3,
+            backgroundColor: accentColor,
+          }}
+        />
+      </div>
     </AbsoluteFill>
   );
 }

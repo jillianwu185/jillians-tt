@@ -8,7 +8,7 @@ import { STYLE_KIT } from "@/lib/style-kit";
 type Cut = {
   start: number;
   end: number;
-  reason: "filler_word" | "silence";
+  reason: "filler_word" | "silence" | "stutter_or_repeat";
   user_nudged: boolean;
   accepted: boolean;
 };
@@ -47,6 +47,7 @@ export default function ReviewPage() {
   const [currentTime, setCurrentTime] = useState(0);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
 
+  const [headerTitle, setHeaderTitle] = useState<string>("");
   const [captionStyle, setCaptionStyle] = useState<string>("static_block");
   const [captionFont, setCaptionFont] = useState<string>("airy");
   const [captionSizeMultiplier, setCaptionSizeMultiplier] = useState<number>(1);
@@ -98,13 +99,14 @@ export default function ReviewPage() {
     const supabase = createClient();
     const { data: recipe } = await supabase
       .from("edit_recipes")
-      .select("id, cuts, emphasis_moments, caption_style, accent_color, font_map")
+      .select("id, cuts, emphasis_moments, caption_style, accent_color, font_map, header_title")
       .eq("video_id", videoId)
       .order("version", { ascending: false })
       .limit(1)
       .single();
     if (recipe) {
       setRecipeId(recipe.id);
+      setHeaderTitle(recipe.header_title ?? "");
       setCuts(recipe.cuts ?? []);
       setEmphasisMoments(
         (recipe.emphasis_moments ?? []).map((m: Partial<EmphasisMoment>) => ({
@@ -206,6 +208,7 @@ export default function ReviewPage() {
         caption_style: captionStyle,
         accent_color: accentColor,
         font_map: { caption: captionFont, captionSizeMultiplier },
+        header_title: headerTitle || null,
       })
       .eq("id", recipeId);
     if (!error) {
@@ -330,6 +333,17 @@ export default function ReviewPage() {
 
       <section className="mb-10">
         <h2 className="mb-3 text-lg font-medium">Style</h2>
+
+        <p className="mb-2 text-sm font-medium text-neutral-700">
+          Header title <span className="font-normal text-neutral-400">(shown above your head, whole video)</span>
+        </p>
+        <input
+          type="text"
+          value={headerTitle}
+          onChange={(e) => setHeaderTitle(e.target.value)}
+          placeholder="auto-generated after transcription"
+          className="mb-4 w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
+        />
 
         <p className="mb-2 text-sm font-medium text-neutral-700">Caption style</p>
         <div className="mb-4 flex flex-wrap gap-2">

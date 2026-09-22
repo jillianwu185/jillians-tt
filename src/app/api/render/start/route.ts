@@ -14,7 +14,7 @@ type Supabase = Awaited<ReturnType<typeof createClient>>;
 async function buildClipInput(
   supabase: Supabase,
   videoId: string
-): Promise<{ clip: ClipInput; editRecipeId: string } | { error: string }> {
+): Promise<{ clip: ClipInput; editRecipeId: string; headerTitle: string | null } | { error: string }> {
   const { data: video, error: videoError } = await supabase
     .from("videos")
     .select("id, storage_path, duration_seconds")
@@ -24,7 +24,7 @@ async function buildClipInput(
 
   const { data: recipe, error: recipeError } = await supabase
     .from("edit_recipes")
-    .select("id, cuts, emphasis_moments, caption_style, accent_color, font_map")
+    .select("id, cuts, emphasis_moments, caption_style, accent_color, font_map, header_title")
     .eq("video_id", videoId)
     .order("version", { ascending: false })
     .limit(1)
@@ -52,6 +52,7 @@ async function buildClipInput(
 
   return {
     editRecipeId: recipe.id,
+    headerTitle: recipe.header_title ?? null,
     clip: {
       videoUrl: signedUrlData.signedUrl,
       sourceDurationSeconds: video.duration_seconds,
@@ -82,12 +83,14 @@ export async function POST(request: NextRequest) {
 
   const clips: ClipInput[] = [];
   let editRecipeId: string | null = null;
+  let headerTitle: string | null = null;
 
   if (video_id) {
     const result = await buildClipInput(supabase, video_id);
     if ("error" in result) return NextResponse.json({ error: result.error }, { status: 404 });
     clips.push(result.clip);
     editRecipeId = result.editRecipeId;
+    headerTitle = result.headerTitle;
   } else {
     const { data: videos, error: videosError } = await supabase
       .from("videos")
@@ -103,6 +106,13 @@ export async function POST(request: NextRequest) {
       if ("error" in result) return NextResponse.json({ error: result.error }, { status: 404 });
       clips.push(result.clip);
     }
+
+    const { data: project } = await supabase
+      .from("projects")
+      .select("header_title")
+      .eq("id", project_id)
+      .single();
+    headerTitle = project?.header_title ?? null;
   }
 
   const { data: fontRows } = await supabase.from("fonts").select("key, google_font_family");
@@ -114,7 +124,7 @@ export async function POST(request: NextRequest) {
     functionName: FUNCTION_NAME,
     serveUrl: SERVE_URL,
     composition: "EditedVideo",
-    inputProps: { clips, fontMap },
+    inputProps: { clips, fontMap, headerTitle },
     codec: "h264",
     crf: 28,
   });

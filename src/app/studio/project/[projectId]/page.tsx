@@ -20,6 +20,8 @@ export default function ProjectPage() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [errorMessage, setErrorMessage] = useState("");
   const [clips, setClips] = useState<Clip[]>([]);
+  const [headerTitle, setHeaderTitle] = useState("");
+  const [headerSaveState, setHeaderSaveState] = useState<"idle" | "saving" | "saved">("idle");
 
   const [prompt, setPrompt] = useState("");
   const [promptState, setPromptState] = useState<"idle" | "sending" | "error">("idle");
@@ -44,7 +46,25 @@ export default function ProjectPage() {
       return;
     }
     setClips(data);
+
+    const { data: project } = await supabase
+      .from("projects")
+      .select("header_title")
+      .eq("id", projectId)
+      .single();
+    setHeaderTitle(project?.header_title ?? "");
+
     setLoadState("ready");
+  }
+
+  async function handleSaveHeaderTitle() {
+    setHeaderSaveState("saving");
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("projects")
+      .update({ header_title: headerTitle || null })
+      .eq("id", projectId);
+    setHeaderSaveState(error ? "idle" : "saved");
   }
 
   async function loadPastRenders() {
@@ -171,6 +191,31 @@ export default function ProjectPage() {
       <p className="mb-6 text-neutral-600">
         Reorder your clips, edit cuts/emphasis on each, then render the whole thing.
       </p>
+
+      <section className="mb-10">
+        <h2 className="mb-3 text-lg font-medium">
+          Header title <span className="font-normal text-neutral-400">(shown above your head, whole video)</span>
+        </h2>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={headerTitle}
+            onChange={(e) => {
+              setHeaderTitle(e.target.value);
+              setHeaderSaveState("idle");
+            }}
+            placeholder="auto-generated after all clips finish uploading"
+            className="flex-1 rounded border border-neutral-300 px-2 py-1.5 text-sm"
+          />
+          <button
+            onClick={handleSaveHeaderTitle}
+            disabled={headerSaveState === "saving"}
+            className="rounded bg-black px-3 py-1.5 text-sm text-white"
+          >
+            {headerSaveState === "saving" ? "Saving…" : headerSaveState === "saved" ? "Saved" : "Save"}
+          </button>
+        </div>
+      </section>
 
       <section className="mb-10">
         <h2 className="mb-3 text-lg font-medium">Clips ({clips.length})</h2>

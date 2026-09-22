@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { analyzeWordAudioFeatures, extractCompressedAudio } from "@/lib/audio-analysis";
-import { detectFillerAndSilenceCuts, detectEmphasisCandidates } from "@/lib/cut-detection";
+import { detectFillerAndSilenceCuts, detectEmphasisCandidates, type Cut } from "@/lib/cut-detection";
+import { detectContextualCuts } from "@/lib/contextual-cuts";
 import { generateTopicTag } from "@/lib/topic-tag";
+import { generateAutoStyle } from "@/lib/auto-style";
 
 export const maxDuration = 60;
 
@@ -23,7 +25,7 @@ export async function POST(request: NextRequest) {
 
   const { data: video, error: videoError } = await supabase
     .from("videos")
-    .select("id, storage_path")
+    .select("id, storage_path, project_id")
     .eq("id", video_id)
     .single();
   if (videoError || !video) {
@@ -92,8 +94,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 
-  const cuts = detectFillerAndSilenceCuts(wordsWithAudioFeatures);
+  const heuristicCuts = detectFillerAndSilenceCuts(wordsWithAudioFeatures);
+  const contextualCuts = await detectContextualCuts(wordsWithAudioFeatures).catch(() => [] as Cut[]);
+  const cuts = [...heuristicCuts, ...contextualCuts].sort((a, b) => a.start - b.start);
   const emphasisMoments = detectEmphasisCandidates(wordsWithAudioFeatures);
+
+  const transcriptText = words.map((w) => w.word).join(" ");
+  const topicTag = transcriptText
+    ? await generateTopicTag(transcriptText).catch(() => null)
+    : "silent clip";
+
+  // Multi-clip projects get one combined auto-style pass after every clip is
+  // in (see /api/project-autostyle) rather than a different style per clip.
+  const autoStyle =
+    !video.project_id && transcriptText
+      ? await generateAutoStyle(transcriptText).catch(() => null)
+      : null;
 
   const { error: recipeError } = await supabase.from("edit_recipes").insert({
     video_id,
@@ -102,16 +118,15 @@ export async function POST(request: NextRequest) {
     captions: [],
     emphasis_moments: emphasisMoments,
     font_map: {},
+    header_title: autoStyle?.headerTitle ?? null,
+    mood: autoStyle?.mood ?? null,
+    caption_style: autoStyle?.captionStyle ?? null,
+    accent_color: autoStyle?.accentColor ?? null,
     version: 1,
   });
   if (recipeError) {
     return NextResponse.json({ error: recipeError.message }, { status: 500 });
   }
-
-  const transcriptText = words.map((w) => w.word).join(" ");
-  const topicTag = transcriptText
-    ? await generateTopicTag(transcriptText).catch(() => null)
-    : "silent clip";
 
   const { error: updateError } = await supabase
     .from("videos")
