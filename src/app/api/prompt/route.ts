@@ -15,7 +15,16 @@ function buildTool(fontKeys: string[]) {
         mood: { type: "string", description: "Overall mood/tone, e.g. 'light and fun'." },
         caption_style: {
           type: "string",
-          enum: ["two_layer_headline", "karaoke_reveal", "static_block"],
+          enum: [
+            "two_layer_headline",
+            "karaoke_reveal",
+            "static_block",
+            "word_by_word",
+            "progressive_reveal",
+            "typing",
+          ],
+          description:
+            "two_layer_headline: bold two-tier text. karaoke_reveal: full sentence, active word highlighted. static_block: plain sentence in a background chip. word_by_word: one word on screen at a time. progressive_reveal: sentence builds up word by word as it's spoken. typing: typewriter effect.",
         },
         caption_font: { type: "string", enum: fontKeys, description: "Font used for all captions." },
         caption_size_multiplier: {
@@ -112,7 +121,7 @@ export async function POST(request: NextRequest) {
   const systemPrompt = `You are editing a short TikTok video for a single creator using a fixed brand Style Kit.
 
 Style Kit colors: ${JSON.stringify(STYLE_KIT.colors)}
-Caption styles available: two_layer_headline, karaoke_reveal, static_block
+Caption styles available: two_layer_headline, karaoke_reveal, static_block, word_by_word, progressive_reveal, typing
 Fonts available: ${fontDescriptions}
 
 Current recipe: mood=${recipe.mood ?? "none"}, caption_style=${recipe.caption_style ?? "none"}, caption_font=${currentFontMap.caption ?? "airy"}, caption_size_multiplier=${currentFontMap.captionSizeMultiplier ?? 1}, accent_color=${recipe.accent_color ?? "none"}

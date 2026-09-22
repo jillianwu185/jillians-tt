@@ -2,6 +2,7 @@ import {
   AbsoluteFill,
   OffthreadVideo,
   Sequence,
+  spring,
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
@@ -25,7 +26,13 @@ export type EmphasisMomentProps = {
   calloutY: number;
 };
 
-export type CaptionStyle = "two_layer_headline" | "karaoke_reveal" | "static_block";
+export type CaptionStyle =
+  | "two_layer_headline"
+  | "karaoke_reveal"
+  | "static_block"
+  | "word_by_word"
+  | "progressive_reveal"
+  | "typing";
 
 export type ClipInput = {
   videoUrl: string;
@@ -292,12 +299,142 @@ function Captions({
     );
   }
 
+  if (style === "word_by_word") {
+    return <WordByWordCaption words={chunk.words} outputTime={outputTime} base={base} accentColor={accentColor} />;
+  }
+
+  if (style === "progressive_reveal") {
+    return <ProgressiveRevealCaption words={chunk.words} outputTime={outputTime} base={base} />;
+  }
+
+  if (style === "typing") {
+    return <TypingCaption words={chunk.words} outputTime={outputTime} base={base} />;
+  }
+
   // two_layer_headline: first word big/bold, rest smaller underneath
   const [first, ...rest] = chunk.text.split(" ");
   return (
     <div style={base}>
       <div style={{ fontSize: 72 * sizeMultiplier, fontWeight: 800, marginBottom: 8 }}>{first}</div>
       <div style={{ fontSize: 44 * sizeMultiplier, fontWeight: 500 }}>{rest.join(" ")}</div>
+    </div>
+  );
+}
+
+type CaptionWordTiming = { word: string; start: number; end: number };
+
+// Only the current word is ever on screen at once, popping in with a spring
+// scale — a hard cut to the next word rather than a color-highlighted
+// full sentence (that's what karaoke_reveal is for).
+function WordByWordCaption({
+  words,
+  outputTime,
+  base,
+  accentColor,
+}: {
+  words: CaptionWordTiming[];
+  outputTime: number;
+  base: React.CSSProperties;
+  accentColor: string;
+}) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const activeWord = words.find((w) => outputTime >= w.start && outputTime < w.end);
+  if (!activeWord) return null;
+
+  const framesSinceStart = frame - Math.round(activeWord.start * fps);
+  const scale = spring({ frame: framesSinceStart, fps, config: { damping: 12, stiffness: 200 } });
+
+  return (
+    <div style={{ ...base, transform: `scale(${scale})` }}>
+      {activeWord.word}
+      <div
+        style={{
+          margin: "8px auto 0",
+          width: "40%",
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: accentColor,
+        }}
+      />
+    </div>
+  );
+}
+
+// Full sentence, but each word pops in at its own timestamp and stays —
+// unlike karaoke_reveal (all words visible the whole time, only the color
+// changes), words here are genuinely hidden until spoken.
+function ProgressiveRevealCaption({
+  words,
+  outputTime,
+  base,
+}: {
+  words: CaptionWordTiming[];
+  outputTime: number;
+  base: React.CSSProperties;
+}) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+
+  return (
+    <div style={base}>
+      {words.map((w, i) => {
+        const revealed = outputTime >= w.start;
+        const framesSinceReveal = frame - Math.round(w.start * fps);
+        const progress = revealed
+          ? spring({ frame: framesSinceReveal, fps, config: { damping: 14 } })
+          : 0;
+        return (
+          <span
+            key={i}
+            style={{
+              display: "inline-block",
+              opacity: progress,
+              transform: `translateY(${(1 - progress) * 10}px)`,
+              marginRight: "0.3em",
+            }}
+          >
+            {w.word}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+// Classic typewriter reveal — characters appear left to right, paced by each
+// word's own [start, end] window (not a fixed constant rate), with a
+// blinking cursor at the current reveal point.
+function TypingCaption({
+  words,
+  outputTime,
+  base,
+}: {
+  words: CaptionWordTiming[];
+  outputTime: number;
+  base: React.CSSProperties;
+}) {
+  const frame = useCurrentFrame();
+
+  let revealedText = "";
+  for (const w of words) {
+    if (outputTime <= w.start) break;
+    if (outputTime >= w.end) {
+      revealedText += (revealedText ? " " : "") + w.word;
+    } else {
+      const progress = (outputTime - w.start) / (w.end - w.start);
+      const chars = Math.round(w.word.length * progress);
+      revealedText += (revealedText ? " " : "") + w.word.slice(0, chars);
+      break;
+    }
+  }
+
+  const cursorVisible = Math.floor(frame / 15) % 2 === 0;
+
+  return (
+    <div style={base}>
+      {revealedText}
+      <span style={{ opacity: cursorVisible ? 1 : 0 }}>|</span>
     </div>
   );
 }

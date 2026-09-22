@@ -15,8 +15,16 @@ function buildTool(fontKeys: string[]) {
         mood: { type: "string", description: "Overall mood/tone, applied to every clip, e.g. 'light and fun'." },
         caption_style: {
           type: "string",
-          enum: ["two_layer_headline", "karaoke_reveal", "static_block"],
-          description: "Applied to every clip in the project.",
+          enum: [
+            "two_layer_headline",
+            "karaoke_reveal",
+            "static_block",
+            "word_by_word",
+            "progressive_reveal",
+            "typing",
+          ],
+          description:
+            "Applied to every clip in the project. two_layer_headline: bold two-tier text. karaoke_reveal: full sentence, active word highlighted. static_block: plain sentence in a background chip. word_by_word: one word on screen at a time. progressive_reveal: sentence builds up word by word as it's spoken. typing: typewriter effect.",
         },
         caption_font: { type: "string", enum: fontKeys, description: "Font for captions, applied to every clip." },
         caption_size_multiplier: {
@@ -131,7 +139,7 @@ export async function POST(request: NextRequest) {
   const systemPrompt = `You are editing a multi-clip TikTok video (clips play back-to-back in order) for a single creator using a fixed brand Style Kit.
 
 Style Kit colors: ${JSON.stringify(STYLE_KIT.colors)}
-Caption styles available: two_layer_headline, karaoke_reveal, static_block
+Caption styles available: two_layer_headline, karaoke_reveal, static_block, word_by_word, progressive_reveal, typing
 Fonts available: ${fontDescriptions}
 
 This project has ${clips.length} clips, numbered 0 to ${clips.length - 1} in playback order:

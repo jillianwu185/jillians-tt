@@ -34,7 +34,14 @@ type Font = { key: string; display_name: string; google_font_family: string };
 
 type LoadState = "loading" | "ready" | "error";
 
-const CAPTION_STYLES = ["two_layer_headline", "karaoke_reveal", "static_block"] as const;
+const CAPTION_STYLES = [
+  "two_layer_headline",
+  "karaoke_reveal",
+  "static_block",
+  "word_by_word",
+  "progressive_reveal",
+  "typing",
+] as const;
 const TREATMENTS = ["punch_in_zoom", "keyword_callout", "both"] as const;
 
 export default function ReviewPage() {

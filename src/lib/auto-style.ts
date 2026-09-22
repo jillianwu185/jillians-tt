@@ -6,7 +6,13 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 export type AutoStyle = {
   headerTitle: string;
   mood: string;
-  captionStyle: "two_layer_headline" | "karaoke_reveal" | "static_block";
+  captionStyle:
+    | "two_layer_headline"
+    | "karaoke_reveal"
+    | "static_block"
+    | "word_by_word"
+    | "progressive_reveal"
+    | "typing";
   accentColor: string;
 };
 
@@ -24,8 +30,16 @@ const AUTO_STYLE_TOOL = {
       mood: { type: "string", description: "One or two words, e.g. 'chill and reflective'." },
       caption_style: {
         type: "string",
-        enum: ["two_layer_headline", "karaoke_reveal", "static_block"],
-        description: "Pick whichever best fits a chill, minimalist vibe for this specific transcript.",
+        enum: [
+          "two_layer_headline",
+          "karaoke_reveal",
+          "static_block",
+          "word_by_word",
+          "progressive_reveal",
+          "typing",
+        ],
+        description:
+          "two_layer_headline: bold two-tier text, attention-grabbing. karaoke_reveal: full sentence, active word highlighted in accent color. static_block: plain sentence in a solid background chip, most minimalist. word_by_word: one word on screen at a time, punchy. progressive_reveal: sentence builds up as each word is spoken, calm pacing. typing: typewriter effect, chill/steady pacing. Pick whichever best fits a chill, minimalist vibe for this specific transcript.",
       },
       accent_color: {
         type: "string",
