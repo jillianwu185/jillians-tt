@@ -11,6 +11,7 @@ type Clip = {
   topic_tag: string | null;
   duration_seconds: number | null;
   status: string;
+  included_in_story: boolean;
 };
 
 type LoadState = "loading" | "ready" | "error";
@@ -22,6 +23,10 @@ export default function ProjectPage() {
   const [clips, setClips] = useState<Clip[]>([]);
   const [headerTitle, setHeaderTitle] = useState("");
   const [headerSaveState, setHeaderSaveState] = useState<"idle" | "saving" | "saved">("idle");
+
+  const [storyState, setStoryState] = useState<"idle" | "arranging" | "error">("idle");
+  const [storyReasoning, setStoryReasoning] = useState("");
+  const [storyErrorMessage, setStoryErrorMessage] = useState("");
 
   const [prompt, setPrompt] = useState("");
   const [promptState, setPromptState] = useState<"idle" | "sending" | "error">("idle");
@@ -37,7 +42,7 @@ export default function ProjectPage() {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("videos")
-      .select("id, sequence_order, topic_tag, duration_seconds, status")
+      .select("id, sequence_order, topic_tag, duration_seconds, status, included_in_story")
       .eq("project_id", projectId)
       .order("sequence_order", { ascending: true });
     if (error || !data) {
@@ -93,21 +98,62 @@ export default function ProjectPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
-  async function moveClip(index: number, direction: -1 | 1) {
+  async function moveClip(clip: Clip, direction: -1 | 1) {
+    const includedClips = clips.filter((c) => c.included_in_story);
+    const index = includedClips.findIndex((c) => c.id === clip.id);
     const targetIndex = index + direction;
-    if (targetIndex < 0 || targetIndex >= clips.length) return;
+    if (index < 0 || targetIndex < 0 || targetIndex >= includedClips.length) return;
 
     const supabase = createClient();
-    const a = clips[index];
-    const b = clips[targetIndex];
+    const a = includedClips[index];
+    const b = includedClips[targetIndex];
 
-    const reordered = [...clips];
-    reordered[index] = b;
-    reordered[targetIndex] = a;
-    setClips(reordered);
+    setClips((prev) =>
+      prev.map((c) => {
+        if (c.id === a.id) return { ...c, sequence_order: b.sequence_order };
+        if (c.id === b.id) return { ...c, sequence_order: a.sequence_order };
+        return c;
+      })
+    );
 
     await supabase.from("videos").update({ sequence_order: b.sequence_order }).eq("id", a.id);
     await supabase.from("videos").update({ sequence_order: a.sequence_order }).eq("id", b.id);
+  }
+
+  async function setIncluded(clip: Clip, included: boolean) {
+    const supabase = createClient();
+    const maxOrder = Math.max(0, ...clips.map((c) => c.sequence_order));
+    const nextOrder = included ? maxOrder + 1 : clip.sequence_order;
+    setClips((prev) =>
+      prev.map((c) =>
+        c.id === clip.id ? { ...c, included_in_story: included, sequence_order: nextOrder } : c
+      )
+    );
+    await supabase
+      .from("videos")
+      .update({ included_in_story: included, sequence_order: nextOrder })
+      .eq("id", clip.id);
+  }
+
+  async function handleArrangeStory() {
+    setStoryState("arranging");
+    setStoryErrorMessage("");
+    setStoryReasoning("");
+    try {
+      const response = await fetch("/api/project-story", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: projectId }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Story arrangement failed");
+      setStoryReasoning(result.reasoning ?? "");
+      setStoryState("idle");
+      await loadClips();
+    } catch (err) {
+      setStoryErrorMessage(err instanceof Error ? err.message : "Story arrangement failed");
+      setStoryState("error");
+    }
   }
 
   async function handlePromptSubmit(e: React.FormEvent) {
@@ -178,6 +224,11 @@ export default function ProjectPage() {
     }
   }
 
+  const includedClips = clips
+    .filter((c) => c.included_in_story)
+    .sort((a, b) => a.sequence_order - b.sequence_order);
+  const excludedClips = clips.filter((c) => !c.included_in_story);
+
   if (loadState === "loading") {
     return <p className="p-16 text-center text-neutral-500">Loading…</p>;
   }
@@ -218,16 +269,33 @@ export default function ProjectPage() {
       </section>
 
       <section className="mb-10">
-        <h2 className="mb-3 text-lg font-medium">Clips ({clips.length})</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-medium">Clips ({includedClips.length})</h2>
+          <button
+            onClick={handleArrangeStory}
+            disabled={storyState === "arranging"}
+            className="rounded-full bg-black px-3 py-1.5 text-xs text-white"
+          >
+            {storyState === "arranging" ? "Arranging…" : "Auto-arrange story"}
+          </button>
+        </div>
+        <p className="mb-3 text-sm text-neutral-500">
+          Reorders clips for a cohesive story, picks the strongest opening hook, cuts repeated
+          points, and targets a 30-60s runtime. Drop a clip from the story or drag order manually
+          any time afterward.
+        </p>
+        {storyReasoning && <p className="mb-3 text-sm text-neutral-600">{storyReasoning}</p>}
+        {storyErrorMessage && <p className="mb-3 text-sm text-red-600">{storyErrorMessage}</p>}
+
         <ul className="space-y-2">
-          {clips.map((clip, i) => (
+          {includedClips.map((clip, i) => (
             <li
               key={clip.id}
               className="flex items-center gap-3 rounded-md border border-neutral-200 p-3 text-sm"
             >
               <div className="flex flex-col gap-1">
                 <button
-                  onClick={() => moveClip(i, -1)}
+                  onClick={() => moveClip(clip, -1)}
                   disabled={i === 0}
                   className="text-neutral-400 hover:text-black disabled:opacity-30"
                   aria-label="Move up"
@@ -235,8 +303,8 @@ export default function ProjectPage() {
                   ▲
                 </button>
                 <button
-                  onClick={() => moveClip(i, 1)}
-                  disabled={i === clips.length - 1}
+                  onClick={() => moveClip(clip, 1)}
+                  disabled={i === includedClips.length - 1}
                   className="text-neutral-400 hover:text-black disabled:opacity-30"
                   aria-label="Move down"
                 >
@@ -248,9 +316,42 @@ export default function ProjectPage() {
                 {clip.duration_seconds ? ` — ${Math.round(clip.duration_seconds)}s` : ""}
               </Link>
               <span className="text-neutral-500">{clip.status}</span>
+              <button
+                onClick={() => setIncluded(clip, false)}
+                className="text-neutral-400 hover:text-red-600"
+              >
+                Drop
+              </button>
             </li>
           ))}
         </ul>
+
+        {excludedClips.length > 0 && (
+          <div className="mt-6">
+            <h3 className="mb-2 text-sm font-medium text-neutral-500">
+              Cut from the story ({excludedClips.length})
+            </h3>
+            <ul className="space-y-2">
+              {excludedClips.map((clip) => (
+                <li
+                  key={clip.id}
+                  className="flex items-center gap-3 rounded-md border border-dashed border-neutral-200 p-3 text-sm text-neutral-400"
+                >
+                  <Link href={`/studio/${clip.id}`} className="flex-1 hover:underline">
+                    {clip.topic_tag ?? "(untitled)"}
+                    {clip.duration_seconds ? ` — ${Math.round(clip.duration_seconds)}s` : ""}
+                  </Link>
+                  <button
+                    onClick={() => setIncluded(clip, true)}
+                    className="text-neutral-500 hover:text-black"
+                  >
+                    Add back
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       <section className="mb-10 border-t border-neutral-200 pt-8">

@@ -101,6 +101,7 @@ export async function POST(request: NextRequest) {
       .from("videos")
       .select("id")
       .eq("project_id", project_id)
+      .eq("included_in_story", true)
       .order("sequence_order", { ascending: true });
     if (videosError || !videos || videos.length === 0) {
       return NextResponse.json({ error: "No clips found for this project" }, { status: 404 });
