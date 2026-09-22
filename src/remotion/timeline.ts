@@ -59,3 +59,33 @@ export function mapSourceTimeToOutputTime(
   }
   return null;
 }
+
+// Like mapSourceTimeToOutputTime, but for an arbitrary [start, end) window
+// (e.g. a user-picked image overlay range) rather than a single instant. A
+// word's own [start, end] never straddles a cut (cuts fall in the silence
+// around words), but a freely-chosen overlay window can — if either edge
+// lands inside a removed segment, clamp inward to the nearest kept boundary
+// instead of dropping the whole window.
+export function mapRangeToOutputTime(
+  start: number,
+  end: number,
+  segments: KeptSegment[]
+): { start: number; end: number } | null {
+  let mappedStart = mapSourceTimeToOutputTime(start, segments);
+  if (mappedStart === null) {
+    const nextSeg = segments.find((s) => s.sourceStart >= start);
+    if (!nextSeg) return null;
+    mappedStart = nextSeg.outputStart;
+  }
+
+  let mappedEnd = mapSourceTimeToOutputTime(end, segments);
+  if (mappedEnd === null) {
+    const priorSegs = segments.filter((s) => s.sourceStart < end);
+    const lastSeg = priorSegs[priorSegs.length - 1];
+    if (!lastSeg) return null;
+    mappedEnd = lastSeg.outputEnd;
+  }
+
+  if (mappedEnd <= mappedStart) return null;
+  return { start: mappedStart, end: mappedEnd };
+}

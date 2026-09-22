@@ -1,5 +1,6 @@
 import {
   AbsoluteFill,
+  Img,
   OffthreadVideo,
   Sequence,
   spring,
@@ -7,7 +8,13 @@ import {
   useVideoConfig,
 } from "remotion";
 import { useDynamicGoogleFonts } from "./dynamicFonts";
-import { computeKeptSegments, mapSourceTimeToOutputTime, totalOutputDuration, type KeptSegment } from "./timeline";
+import {
+  computeKeptSegments,
+  mapRangeToOutputTime,
+  mapSourceTimeToOutputTime,
+  totalOutputDuration,
+  type KeptSegment,
+} from "./timeline";
 import { buildCaptionChunks, type TranscriptWord, type CaptionChunk } from "./captions";
 
 const FALLBACK_FONT_FAMILY = "Public Sans";
@@ -34,12 +41,29 @@ export type CaptionStyle =
   | "progressive_reveal"
   | "typing";
 
+// Direction the image travels through — used for both animationIn (entering
+// via that edge) and animationOut (exiting via that edge). "crumble" is a
+// stylized crumple-and-fade rather than an edge transit.
+export type OverlayEdge = "none" | "left" | "right" | "top" | "bottom" | "crumble";
+
+export type ImageOverlayProps = {
+  imageUrl: string;
+  start: number;
+  end: number;
+  x: number;
+  y: number;
+  widthPercent: number;
+  animationIn: OverlayEdge;
+  animationOut: OverlayEdge;
+};
+
 export type ClipInput = {
   videoUrl: string;
   sourceDurationSeconds: number;
   cuts: { start: number; end: number }[];
   words: TranscriptWord[];
   emphasisMoments: EmphasisMomentProps[];
+  imageOverlays: ImageOverlayProps[];
   captionStyle: CaptionStyle;
   captionFont: string;
   captionSizeMultiplier: number;
@@ -96,6 +120,7 @@ export function VideoComposition({ clips, fontMap, headerTitle }: VideoCompositi
     captionSizeMultiplier: number;
   })[] = [];
   const allEmphasis: EmphasisMomentProps[] = [];
+  const allImageOverlays: ImageOverlayProps[] = [];
 
   for (const { clip, keptSegments, offset } of timeline) {
     const localChunks = buildCaptionChunks(clip.words, keptSegments);
@@ -119,10 +144,18 @@ export function VideoComposition({ clips, fontMap, headerTitle }: VideoCompositi
         allEmphasis.push({ ...m, start: localStart + offset, end: localEnd + offset });
       }
     }
+
+    for (const o of clip.imageOverlays) {
+      const mapped = mapRangeToOutputTime(o.start, o.end, keptSegments);
+      if (mapped !== null) {
+        allImageOverlays.push({ ...o, start: mapped.start + offset, end: mapped.end + offset });
+      }
+    }
   }
 
   const activeCaption = allCaptionChunks.find((c) => outputTime >= c.start && outputTime < c.end);
   const activeEmphasis = allEmphasis.find((m) => outputTime >= m.start && outputTime < m.end);
+  const activeImageOverlays = allImageOverlays.filter((o) => outputTime >= o.start && outputTime < o.end);
 
   const isZooming =
     activeEmphasis?.treatment === "punch_in_zoom" || activeEmphasis?.treatment === "both";
@@ -155,6 +188,10 @@ export function VideoComposition({ clips, fontMap, headerTitle }: VideoCompositi
           })
         )}
       </AbsoluteFill>
+
+      {activeImageOverlays.map((overlay, i) => (
+        <ImageOverlayView key={i} overlay={overlay} />
+      ))}
 
       {activeCaption && (
         <Captions
@@ -436,5 +473,67 @@ function TypingCaption({
       {revealedText}
       <span style={{ opacity: cursorVisible ? 1 : 0 }}>|</span>
     </div>
+  );
+}
+
+// hiddenAmount: 0 = fully in place, 1 = fully off-screen/crumpled away. Used
+// symmetrically for both entering (1 -> 0) and exiting (0 -> 1) — the visual
+// endpoint for a given edge is the same regardless of which direction time
+// is moving through it.
+function overlayTransform(edge: OverlayEdge, hiddenAmount: number) {
+  switch (edge) {
+    case "left":
+      return { x: -160 * hiddenAmount, y: 0, scale: 1, rotate: 0, opacity: 1 };
+    case "right":
+      return { x: 160 * hiddenAmount, y: 0, scale: 1, rotate: 0, opacity: 1 };
+    case "top":
+      return { x: 0, y: -160 * hiddenAmount, scale: 1, rotate: 0, opacity: 1 };
+    case "bottom":
+      return { x: 0, y: 160 * hiddenAmount, scale: 1, rotate: 0, opacity: 1 };
+    case "crumble":
+      return { x: 0, y: 0, scale: 1 - 0.6 * hiddenAmount, rotate: 25 * hiddenAmount, opacity: 1 - hiddenAmount };
+    case "none":
+    default:
+      return { x: 0, y: 0, scale: 1, rotate: 0, opacity: 1 };
+  }
+}
+
+function ImageOverlayView({ overlay }: { overlay: ImageOverlayProps }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const outputTime = frame / fps;
+
+  const transitionDuration = Math.max(0.05, Math.min(0.4, (overlay.end - overlay.start) / 2));
+
+  let hiddenAmount = 0;
+  let edge: OverlayEdge = "none";
+
+  if (outputTime < overlay.start + transitionDuration && overlay.animationIn !== "none") {
+    const progress = Math.min(1, Math.max(0, (outputTime - overlay.start) / transitionDuration));
+    hiddenAmount = 1 - progress;
+    edge = overlay.animationIn;
+  } else if (outputTime > overlay.end - transitionDuration && overlay.animationOut !== "none") {
+    const progress = Math.min(
+      1,
+      Math.max(0, (outputTime - (overlay.end - transitionDuration)) / transitionDuration)
+    );
+    hiddenAmount = progress;
+    edge = overlay.animationOut;
+  }
+
+  const { x, y, scale, rotate, opacity } = overlayTransform(edge, hiddenAmount);
+
+  return (
+    <Img
+      src={overlay.imageUrl}
+      style={{
+        position: "absolute",
+        left: `${overlay.x}%`,
+        top: `${overlay.y}%`,
+        width: `${overlay.widthPercent}%`,
+        transform: `translate(-50%, -50%) translate(${x}%, ${y}%) scale(${scale}) rotate(${rotate}deg)`,
+        opacity,
+      }}
+    />
   );
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { renderMediaOnLambda } from "@remotion/lambda/client";
 import { createClient } from "@/lib/supabase/server";
-import type { ClipInput } from "@/remotion/Video";
+import type { ClipInput, OverlayEdge } from "@/remotion/Video";
 
 export const maxDuration = 60;
 
@@ -24,7 +24,7 @@ async function buildClipInput(
 
   const { data: recipe, error: recipeError } = await supabase
     .from("edit_recipes")
-    .select("id, cuts, emphasis_moments, caption_style, accent_color, font_map, header_title")
+    .select("id, cuts, emphasis_moments, image_overlays, caption_style, accent_color, font_map, header_title")
     .eq("video_id", videoId)
     .order("version", { ascending: false })
     .limit(1)
@@ -55,6 +55,34 @@ async function buildClipInput(
 
   const fontMap = (recipe.font_map ?? {}) as Record<string, string | number>;
 
+  const imageOverlaysRaw = (recipe.image_overlays ?? []) as {
+    storagePath: string;
+    start: number;
+    end: number;
+    x: number;
+    y: number;
+    widthPercent: number;
+    animationIn: OverlayEdge;
+    animationOut: OverlayEdge;
+  }[];
+  const imageOverlays = await Promise.all(
+    imageOverlaysRaw.map(async (o) => {
+      const { data: signed } = await supabase.storage
+        .from("overlay-images")
+        .createSignedUrl(o.storagePath, 3600);
+      return {
+        imageUrl: signed?.signedUrl ?? "",
+        start: o.start,
+        end: o.end,
+        x: o.x,
+        y: o.y,
+        widthPercent: o.widthPercent,
+        animationIn: o.animationIn,
+        animationOut: o.animationOut,
+      };
+    })
+  );
+
   return {
     editRecipeId: recipe.id,
     headerTitle: recipe.header_title ?? null,
@@ -64,6 +92,7 @@ async function buildClipInput(
       cuts: acceptedCuts,
       words: transcript.words,
       emphasisMoments: approvedEmphasis,
+      imageOverlays,
       captionStyle: recipe.caption_style ?? "static_block",
       captionFont: (fontMap.caption as string) ?? "airy",
       captionSizeMultiplier: (fontMap.captionSizeMultiplier as number) ?? 1,

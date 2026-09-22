@@ -30,9 +30,25 @@ type EmphasisMoment = {
   [key: string]: unknown;
 };
 
+type OverlayEdge = "none" | "left" | "right" | "top" | "bottom" | "crumble";
+
+type ImageOverlay = {
+  storagePath: string;
+  previewUrl: string;
+  start: number;
+  end: number;
+  x: number;
+  y: number;
+  widthPercent: number;
+  animationIn: OverlayEdge;
+  animationOut: OverlayEdge;
+};
+
 type Font = { key: string; display_name: string; google_font_family: string };
 
 type LoadState = "loading" | "ready" | "error";
+
+const OVERLAY_EDGES: OverlayEdge[] = ["none", "left", "right", "top", "bottom", "crumble"];
 
 const CAPTION_STYLES = [
   "two_layer_headline",
@@ -53,6 +69,9 @@ export default function ReviewPage() {
   const [recipeId, setRecipeId] = useState<string | null>(null);
   const [cuts, setCuts] = useState<Cut[]>([]);
   const [emphasisMoments, setEmphasisMoments] = useState<EmphasisMoment[]>([]);
+  const [imageOverlays, setImageOverlays] = useState<ImageOverlay[]>([]);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState("");
   const [currentTime, setCurrentTime] = useState(0);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
 
@@ -108,7 +127,7 @@ export default function ReviewPage() {
     const supabase = createClient();
     const { data: recipe } = await supabase
       .from("edit_recipes")
-      .select("id, cuts, emphasis_moments, caption_style, accent_color, font_map, header_title")
+      .select("id, cuts, emphasis_moments, image_overlays, caption_style, accent_color, font_map, header_title")
       .eq("video_id", videoId)
       .order("version", { ascending: false })
       .limit(1)
@@ -130,6 +149,17 @@ export default function ReviewPage() {
       const fontMap = (recipe.font_map as Record<string, string | number> | null) ?? {};
       setCaptionFont((fontMap.caption as string) ?? "airy");
       setCaptionSizeMultiplier((fontMap.captionSizeMultiplier as number) ?? 1);
+
+      const rawOverlays = (recipe.image_overlays ?? []) as Omit<ImageOverlay, "previewUrl">[];
+      const overlaysWithPreview = await Promise.all(
+        rawOverlays.map(async (o) => {
+          const { data: signed } = await supabase.storage
+            .from("overlay-images")
+            .createSignedUrl(o.storagePath, 3600);
+          return { ...o, previewUrl: signed?.signedUrl ?? "" };
+        })
+      );
+      setImageOverlays(overlaysWithPreview);
     }
   }
 
@@ -185,6 +215,54 @@ export default function ReviewPage() {
     setEmphasisMoments((prev) => prev.map((m, i) => (i === index ? { ...m, ...patch } : m)));
   }
 
+  function updateImageOverlay(index: number, patch: Partial<ImageOverlay>) {
+    setImageOverlays((prev) => prev.map((o, i) => (i === index ? { ...o, ...patch } : o)));
+  }
+
+  function deleteImageOverlay(index: number) {
+    setImageOverlays((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploadingImage(true);
+    setImageUploadError("");
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in");
+
+      const storagePath = `${user.id}/${Date.now()}-${file.name}`;
+      const { error } = await supabase.storage.from("overlay-images").upload(storagePath, file);
+      if (error) throw error;
+
+      const start = Math.min(currentTime, Math.max(0, duration - 0.5));
+      const end = Math.min(start + 3, duration || start + 3);
+      setImageOverlays((prev) => [
+        ...prev,
+        {
+          storagePath,
+          previewUrl: URL.createObjectURL(file),
+          start,
+          end,
+          x: 50,
+          y: 50,
+          widthPercent: 40,
+          animationIn: "bottom",
+          animationOut: "top",
+        },
+      ]);
+    } catch (err) {
+      setImageUploadError(err instanceof Error ? err.message : "Image upload failed");
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
   async function handleAddFont(e: React.FormEvent) {
     e.preventDefault();
     if (!newFontName.trim()) return;
@@ -216,6 +294,16 @@ export default function ReviewPage() {
       .update({
         cuts,
         emphasis_moments: emphasisMoments,
+        image_overlays: imageOverlays.map((o) => ({
+          storagePath: o.storagePath,
+          start: o.start,
+          end: o.end,
+          x: o.x,
+          y: o.y,
+          widthPercent: o.widthPercent,
+          animationIn: o.animationIn,
+          animationOut: o.animationOut,
+        })),
         caption_style: captionStyle,
         accent_color: accentColor,
         font_map: { caption: captionFont, captionSizeMultiplier },
@@ -576,10 +664,10 @@ export default function ReviewPage() {
                       onChange={(e) => updateEmphasis(i, { calloutColor: e.target.value })}
                       className="h-7 w-7 rounded border border-neutral-300"
                     />
-                    <CalloutPositionPad
+                    <PositionPad
                       x={m.calloutX}
                       y={m.calloutY}
-                      onChange={(patch) => updateEmphasis(i, patch)}
+                      onChange={(patch) => updateEmphasis(i, { calloutX: patch.x, calloutY: patch.y })}
                     />
                   </>
                 )}
@@ -588,6 +676,97 @@ export default function ReviewPage() {
           ))}
           {emphasisMoments.length === 0 && (
             <p className="text-sm text-neutral-500">No emphasis moments.</p>
+          )}
+        </ul>
+      </section>
+
+      <section className="mb-8">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-medium">Image overlays ({imageOverlays.length})</h2>
+          <label className="cursor-pointer rounded-full bg-black px-3 py-1.5 text-xs text-white">
+            {uploadingImage ? "Uploading…" : "Add image"}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              disabled={uploadingImage}
+              className="hidden"
+            />
+          </label>
+        </div>
+        {imageUploadError && <p className="mb-3 text-sm text-red-600">{imageUploadError}</p>}
+
+        <ul className="space-y-3">
+          {imageOverlays.map((o, i) => (
+            <li key={i} className="rounded-md border border-neutral-200 p-3 text-sm">
+              <div className="mb-3 flex items-center gap-3">
+                {o.previewUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={o.previewUrl} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
+                )}
+                <div className="flex-1">
+                  <EmphasisTimingScrubber
+                    start={o.start}
+                    end={o.end}
+                    duration={duration}
+                    onChange={(patch) => updateImageOverlay(i, patch)}
+                  />
+                </div>
+                <button
+                  onClick={() => deleteImageOverlay(i)}
+                  className="shrink-0 text-neutral-400 hover:text-red-600"
+                >
+                  Remove
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-1 text-xs text-neutral-500">
+                  size
+                  <input
+                    type="range"
+                    min={10}
+                    max={100}
+                    value={o.widthPercent}
+                    onChange={(e) => updateImageOverlay(i, { widthPercent: parseFloat(e.target.value) })}
+                    className="w-24"
+                  />
+                  <span>{o.widthPercent}%</span>
+                </label>
+                <label className="flex items-center gap-1 text-xs text-neutral-500">
+                  enters from
+                  <select
+                    value={o.animationIn}
+                    onChange={(e) => updateImageOverlay(i, { animationIn: e.target.value as OverlayEdge })}
+                    className="rounded border border-neutral-300 px-2 py-1 text-xs"
+                  >
+                    {OVERLAY_EDGES.map((edge) => (
+                      <option key={edge} value={edge}>
+                        {edge}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center gap-1 text-xs text-neutral-500">
+                  exits via
+                  <select
+                    value={o.animationOut}
+                    onChange={(e) => updateImageOverlay(i, { animationOut: e.target.value as OverlayEdge })}
+                    className="rounded border border-neutral-300 px-2 py-1 text-xs"
+                  >
+                    {OVERLAY_EDGES.map((edge) => (
+                      <option key={edge} value={edge}>
+                        {edge}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <PositionPad x={o.x} y={o.y} onChange={(patch) => updateImageOverlay(i, patch)} />
+              </div>
+            </li>
+          ))}
+          {imageOverlays.length === 0 && (
+            <p className="text-sm text-neutral-500">No image overlays yet.</p>
           )}
         </ul>
       </section>
@@ -738,14 +917,14 @@ function EmphasisTimingScrubber({
   );
 }
 
-function CalloutPositionPad({
+function PositionPad({
   x,
   y,
   onChange,
 }: {
   x: number;
   y: number;
-  onChange: (patch: { calloutX: number; calloutY: number }) => void;
+  onChange: (patch: { x: number; y: number }) => void;
 }) {
   const padRef = useRef<HTMLDivElement>(null);
 
@@ -755,7 +934,7 @@ function CalloutPositionPad({
     const rect = pad.getBoundingClientRect();
     const fracX = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
     const fracY = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
-    onChange({ calloutX: Math.round(fracX * 100), calloutY: Math.round(fracY * 100) });
+    onChange({ x: Math.round(fracX * 100), y: Math.round(fracY * 100) });
   }
 
   return (
@@ -774,7 +953,7 @@ function CalloutPositionPad({
         if (e.buttons !== 1) return;
         updateFromClient(e.clientX, e.clientY);
       }}
-      title="Drag to position the callout"
+      title="Drag to position"
       className="relative h-28 w-[63px] shrink-0 cursor-crosshair rounded-md border border-neutral-300 bg-neutral-800"
     >
       <div
