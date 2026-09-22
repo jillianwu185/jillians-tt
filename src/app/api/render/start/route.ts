@@ -46,7 +46,12 @@ async function buildClipInput(
   const acceptedCuts = (recipe.cuts ?? []).filter((c: { accepted: boolean }) => c.accepted);
   const approvedEmphasis = (recipe.emphasis_moments ?? [])
     .filter((m: { approved: boolean }) => m.approved)
-    .map((m: { calloutFontSize?: number }) => ({ calloutFontSize: 140, ...m }));
+    .map((m: { calloutFontSize?: number; calloutX?: number; calloutY?: number }) => ({
+      calloutFontSize: 140,
+      calloutX: 50,
+      calloutY: 50,
+      ...m,
+    }));
 
   const fontMap = (recipe.font_map ?? {}) as Record<string, string | number>;
 

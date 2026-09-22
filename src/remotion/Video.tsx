@@ -21,6 +21,8 @@ export type EmphasisMomentProps = {
   calloutFont: string;
   calloutColor: string;
   calloutFontSize: number;
+  calloutX: number;
+  calloutY: number;
 };
 
 export type CaptionStyle = "two_layer_headline" | "karaoke_reveal" | "static_block";
@@ -159,17 +161,19 @@ export function VideoComposition({ clips, fontMap, headerTitle }: VideoCompositi
       )}
 
       {isCallout && activeEmphasis && (
-        <AbsoluteFill
-          style={{ alignItems: "center", justifyContent: "center", pointerEvents: "none" }}
-        >
+        <AbsoluteFill style={{ pointerEvents: "none" }}>
           <div
             style={{
+              position: "absolute",
+              left: `${activeEmphasis.calloutX}%`,
+              top: `${activeEmphasis.calloutY}%`,
+              transform: "translate(-50%, -50%)",
               fontFamily: resolveFont(activeEmphasis.calloutFont),
               fontSize: activeEmphasis.calloutFontSize,
               fontWeight: 800,
               color: activeEmphasis.calloutColor,
               textAlign: "center",
-              width: "90%",
+              maxWidth: "80%",
               textShadow: "0 4px 24px rgba(0,0,0,0.5)",
             }}
           >

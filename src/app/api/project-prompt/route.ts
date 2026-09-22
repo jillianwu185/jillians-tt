@@ -50,6 +50,14 @@ function buildTool(fontKeys: string[]) {
               calloutFont: { type: "string", enum: fontKeys },
               calloutFontSize: { type: "number", description: "Pixel size of the callout text. Defaults to 140." },
               calloutColor: { type: "string", description: "Hex color, defaults to Style Kit yellow." },
+              calloutX: {
+                type: "number",
+                description: "Horizontal position, 0-100 (0=left edge, 50=center, 100=right edge). Defaults to 50.",
+              },
+              calloutY: {
+                type: "number",
+                description: "Vertical position, 0-100 (0=top edge, 50=center, 100=bottom edge). Defaults to 50.",
+              },
             },
             required: ["word", "treatment"],
           },
@@ -161,6 +169,8 @@ The user will give you an instruction to update the whole project. Use the updat
       calloutFont?: string;
       calloutFontSize?: number;
       calloutColor?: string;
+      calloutX?: number;
+      calloutY?: number;
     }[];
     reasoning?: string;
   };
@@ -195,6 +205,8 @@ The user will give you an instruction to update the whole project. Use the updat
         calloutFont: m.calloutFont ?? "airy",
         calloutFontSize: m.calloutFontSize ?? 140,
         calloutColor: m.calloutColor ?? STYLE_KIT.colors.yellow,
+        calloutX: m.calloutX ?? 50,
+        calloutY: m.calloutY ?? 50,
       };
     });
 

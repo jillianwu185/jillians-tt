@@ -25,6 +25,8 @@ type EmphasisMoment = {
   calloutFont: string;
   calloutFontSize: number;
   calloutColor: string;
+  calloutX: number;
+  calloutY: number;
   [key: string]: unknown;
 };
 
@@ -111,6 +113,8 @@ export default function ReviewPage() {
       setEmphasisMoments(
         (recipe.emphasis_moments ?? []).map((m: Partial<EmphasisMoment>) => ({
           calloutFontSize: 140,
+          calloutX: 50,
+          calloutY: 50,
           ...m,
         })) as EmphasisMoment[]
       );
@@ -480,7 +484,6 @@ export default function ReviewPage() {
             <li key={i} className="rounded-md border border-neutral-200 p-3 text-sm">
               <div className="mb-2 flex items-center gap-3">
                 <span className="font-medium">&quot;{m.word}&quot;</span>
-                <span className="text-neutral-500">{m.start.toFixed(2)}s</span>
                 <span className="text-xs text-neutral-400">{m.source}</span>
                 <button
                   onClick={() => toggleEmphasisApproved(i)}
@@ -490,6 +493,15 @@ export default function ReviewPage() {
                 >
                   {m.approved ? "Approved" : "Approve"}
                 </button>
+              </div>
+
+              <div className="mb-3">
+                <EmphasisTimingScrubber
+                  start={m.start}
+                  end={m.end}
+                  duration={duration}
+                  onChange={(patch) => updateEmphasis(i, patch)}
+                />
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -556,6 +568,11 @@ export default function ReviewPage() {
                       value={m.calloutColor}
                       onChange={(e) => updateEmphasis(i, { calloutColor: e.target.value })}
                       className="h-7 w-7 rounded border border-neutral-300"
+                    />
+                    <CalloutPositionPad
+                      x={m.calloutX}
+                      y={m.calloutY}
+                      onChange={(patch) => updateEmphasis(i, patch)}
                     />
                   </>
                 )}
@@ -638,5 +655,125 @@ export default function ReviewPage() {
         )}
       </section>
     </main>
+  );
+}
+
+function EmphasisTimingScrubber({
+  start,
+  end,
+  duration,
+  onChange,
+}: {
+  start: number;
+  end: number;
+  duration: number;
+  onChange: (patch: { start: number; end: number }) => void;
+}) {
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  function timeAtClientX(clientX: number): number {
+    const track = trackRef.current;
+    if (!track) return 0;
+    const rect = track.getBoundingClientRect();
+    const frac = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    return frac * duration;
+  }
+
+  // Pointer capture routes all subsequent move/up events to the handle that
+  // was pressed, even once the cursor leaves it — no window listeners or
+  // "dragging" state needed, which avoids a race where a fast click could
+  // leave a stale window listener attached (it would then reposition things
+  // on the next unrelated mouse move).
+  function capture(e: React.PointerEvent<HTMLDivElement>) {
+    e.preventDefault();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Capture is a robustness nice-to-have (keeps dragging past the
+      // element's edges) — dragging still works via onPointerMove without it.
+    }
+  }
+
+  if (duration <= 0) return null;
+
+  return (
+    <div className="flex items-center gap-2 text-xs text-neutral-500">
+      <span className="w-12 shrink-0">{start.toFixed(2)}s</span>
+      <div ref={trackRef} className="relative h-5 flex-1 rounded bg-neutral-100">
+        <div
+          className="absolute top-0 h-full rounded bg-blue-200"
+          style={{
+            left: `${(start / duration) * 100}%`,
+            width: `${Math.max(((end - start) / duration) * 100, 0.5)}%`,
+          }}
+        />
+        <div
+          onPointerDown={capture}
+          onPointerMove={(e) => {
+            if (e.buttons !== 1) return;
+            onChange({ start: Math.min(timeAtClientX(e.clientX), end - 0.05), end });
+          }}
+          className="absolute top-0 h-full w-2.5 cursor-ew-resize rounded-l bg-blue-600"
+          style={{ left: `${(start / duration) * 100}%` }}
+        />
+        <div
+          onPointerDown={capture}
+          onPointerMove={(e) => {
+            if (e.buttons !== 1) return;
+            onChange({ start, end: Math.max(timeAtClientX(e.clientX), start + 0.05) });
+          }}
+          className="absolute top-0 h-full w-2.5 cursor-ew-resize rounded-r bg-blue-600"
+          style={{ left: `calc(${(end / duration) * 100}% - 10px)` }}
+        />
+      </div>
+      <span className="w-12 shrink-0 text-right">{end.toFixed(2)}s</span>
+    </div>
+  );
+}
+
+function CalloutPositionPad({
+  x,
+  y,
+  onChange,
+}: {
+  x: number;
+  y: number;
+  onChange: (patch: { calloutX: number; calloutY: number }) => void;
+}) {
+  const padRef = useRef<HTMLDivElement>(null);
+
+  function updateFromClient(clientX: number, clientY: number) {
+    const pad = padRef.current;
+    if (!pad) return;
+    const rect = pad.getBoundingClientRect();
+    const fracX = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    const fracY = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
+    onChange({ calloutX: Math.round(fracX * 100), calloutY: Math.round(fracY * 100) });
+  }
+
+  return (
+    <div
+      ref={padRef}
+      onPointerDown={(e) => {
+        updateFromClient(e.clientX, e.clientY);
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          // Capture is a robustness nice-to-have (keeps dragging past the
+          // pad's edges) — dragging still works via onPointerMove without it.
+        }
+      }}
+      onPointerMove={(e) => {
+        if (e.buttons !== 1) return;
+        updateFromClient(e.clientX, e.clientY);
+      }}
+      title="Drag to position the callout"
+      className="relative h-28 w-[63px] shrink-0 cursor-crosshair rounded-md border border-neutral-300 bg-neutral-800"
+    >
+      <div
+        className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-pink-400"
+        style={{ left: `${x}%`, top: `${y}%` }}
+      />
+    </div>
   );
 }

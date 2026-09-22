@@ -20,6 +20,9 @@ export type EmphasisMoment = {
   calloutText: string;
   calloutFont: "airy";
   calloutColor: string;
+  calloutFontSize: number;
+  calloutX: number;
+  calloutY: number;
 };
 
 export function detectFillerAndSilenceCuts(words: WordAudioFeatures[]): Cut[] {
@@ -93,6 +96,9 @@ export function detectEmphasisCandidates(words: WordAudioFeatures[]): EmphasisMo
         calloutText: w.word.toUpperCase(),
         calloutFont: "airy",
         calloutColor: "#FCEF91",
+        calloutFontSize: 140,
+        calloutX: 50,
+        calloutY: 50,
         score: volumeAboveBaseline + pitchAboveBaseline / 10,
       });
     }
