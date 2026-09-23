@@ -80,6 +80,8 @@ export default function ReviewPage() {
   const [imageOverlays, setImageOverlays] = useState<ImageOverlay[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imageUploadError, setImageUploadError] = useState("");
+  const [removingBgIndex, setRemovingBgIndex] = useState<number | null>(null);
+  const [removeBgError, setRemoveBgError] = useState("");
   const [videoOverlays, setVideoOverlays] = useState<VideoOverlay[]>([]);
   const [uploadingVideoOverlay, setUploadingVideoOverlay] = useState(false);
   const [videoOverlayUploadError, setVideoOverlayUploadError] = useState("");
@@ -245,6 +247,25 @@ export default function ReviewPage() {
 
   function deleteImageOverlay(index: number) {
     setImageOverlays((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function handleRemoveBackground(index: number) {
+    setRemovingBgIndex(index);
+    setRemoveBgError("");
+    try {
+      const response = await fetch("/api/images/remove-background", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storagePath: imageOverlays[index].storagePath }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Background removal failed");
+      updateImageOverlay(index, { storagePath: result.storagePath, previewUrl: result.previewUrl });
+    } catch (err) {
+      setRemoveBgError(err instanceof Error ? err.message : "Background removal failed");
+    } finally {
+      setRemovingBgIndex(null);
+    }
   }
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -768,6 +789,7 @@ export default function ReviewPage() {
           </label>
         </div>
         {imageUploadError && <p className="mb-3 text-sm text-red-600">{imageUploadError}</p>}
+        {removeBgError && <p className="mb-3 text-sm text-red-600">{removeBgError}</p>}
 
         <ul className="space-y-3">
           {imageOverlays.map((o, i) => (
@@ -789,11 +811,18 @@ export default function ReviewPage() {
                   onClick={() => deleteImageOverlay(i)}
                   className="shrink-0 text-neutral-400 hover:text-red-600"
                 >
-                  Remove
+                  Delete
                 </button>
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onClick={() => handleRemoveBackground(i)}
+                  disabled={removingBgIndex === i}
+                  className="rounded-full bg-neutral-800 px-3 py-1 text-xs text-white disabled:opacity-50"
+                >
+                  {removingBgIndex === i ? "Removing background…" : "Remove background"}
+                </button>
                 <label className="flex items-center gap-1 text-xs text-neutral-500">
                   size
                   <input
