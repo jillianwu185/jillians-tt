@@ -44,11 +44,19 @@ type ImageOverlay = {
   animationOut: OverlayEdge;
 };
 
+type VideoOverlay = {
+  storagePath: string;
+  previewUrl: string;
+  start: number;
+  end: number;
+};
+
 type Font = { key: string; display_name: string; google_font_family: string };
 
 type LoadState = "loading" | "ready" | "error";
 
 const OVERLAY_EDGES: OverlayEdge[] = ["none", "left", "right", "top", "bottom", "crumble"];
+const MAX_VIDEO_OVERLAY_SIZE_BYTES = 50 * 1024 * 1024;
 
 const CAPTION_STYLES = [
   "two_layer_headline",
@@ -72,6 +80,9 @@ export default function ReviewPage() {
   const [imageOverlays, setImageOverlays] = useState<ImageOverlay[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imageUploadError, setImageUploadError] = useState("");
+  const [videoOverlays, setVideoOverlays] = useState<VideoOverlay[]>([]);
+  const [uploadingVideoOverlay, setUploadingVideoOverlay] = useState(false);
+  const [videoOverlayUploadError, setVideoOverlayUploadError] = useState("");
   const [currentTime, setCurrentTime] = useState(0);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
 
@@ -127,7 +138,9 @@ export default function ReviewPage() {
     const supabase = createClient();
     const { data: recipe } = await supabase
       .from("edit_recipes")
-      .select("id, cuts, emphasis_moments, image_overlays, caption_style, accent_color, font_map, header_title")
+      .select(
+        "id, cuts, emphasis_moments, image_overlays, video_overlays, caption_style, accent_color, font_map, header_title"
+      )
       .eq("video_id", videoId)
       .order("version", { ascending: false })
       .limit(1)
@@ -160,6 +173,17 @@ export default function ReviewPage() {
         })
       );
       setImageOverlays(overlaysWithPreview);
+
+      const rawVideoOverlays = (recipe.video_overlays ?? []) as Omit<VideoOverlay, "previewUrl">[];
+      const videoOverlaysWithPreview = await Promise.all(
+        rawVideoOverlays.map(async (o) => {
+          const { data: signed } = await supabase.storage
+            .from("overlay-videos")
+            .createSignedUrl(o.storagePath, 3600);
+          return { ...o, previewUrl: signed?.signedUrl ?? "" };
+        })
+      );
+      setVideoOverlays(videoOverlaysWithPreview);
     }
   }
 
@@ -263,6 +287,50 @@ export default function ReviewPage() {
     }
   }
 
+  function updateVideoOverlay(index: number, patch: Partial<VideoOverlay>) {
+    setVideoOverlays((prev) => prev.map((o, i) => (i === index ? { ...o, ...patch } : o)));
+  }
+
+  function deleteVideoOverlay(index: number) {
+    setVideoOverlays((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function handleVideoOverlayUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (file.size > MAX_VIDEO_OVERLAY_SIZE_BYTES) {
+      setVideoOverlayUploadError(
+        `"${file.name}" is ${(file.size / 1024 / 1024).toFixed(0)}MB — the free plan caps uploads at 50MB.`
+      );
+      return;
+    }
+    setUploadingVideoOverlay(true);
+    setVideoOverlayUploadError("");
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in");
+
+      const storagePath = `${user.id}/${Date.now()}-${file.name}`;
+      const { error } = await supabase.storage.from("overlay-videos").upload(storagePath, file);
+      if (error) throw error;
+
+      const start = Math.min(currentTime, Math.max(0, duration - 0.5));
+      const end = Math.min(start + 3, duration || start + 3);
+      setVideoOverlays((prev) => [
+        ...prev,
+        { storagePath, previewUrl: URL.createObjectURL(file), start, end },
+      ]);
+    } catch (err) {
+      setVideoOverlayUploadError(err instanceof Error ? err.message : "Video upload failed");
+    } finally {
+      setUploadingVideoOverlay(false);
+    }
+  }
+
   async function handleAddFont(e: React.FormEvent) {
     e.preventDefault();
     if (!newFontName.trim()) return;
@@ -303,6 +371,11 @@ export default function ReviewPage() {
           widthPercent: o.widthPercent,
           animationIn: o.animationIn,
           animationOut: o.animationOut,
+        })),
+        video_overlays: videoOverlays.map((o) => ({
+          storagePath: o.storagePath,
+          start: o.start,
+          end: o.end,
         })),
         caption_style: captionStyle,
         accent_color: accentColor,
@@ -767,6 +840,57 @@ export default function ReviewPage() {
           ))}
           {imageOverlays.length === 0 && (
             <p className="text-sm text-neutral-500">No image overlays yet.</p>
+          )}
+        </ul>
+      </section>
+
+      <section className="mb-8">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-medium">Overlay whole video ({videoOverlays.length})</h2>
+          <label className="cursor-pointer rounded-full bg-black px-3 py-1.5 text-xs text-white">
+            {uploadingVideoOverlay ? "Uploading…" : "Add video"}
+            <input
+              type="file"
+              accept="video/*"
+              onChange={handleVideoOverlayUpload}
+              disabled={uploadingVideoOverlay}
+              className="hidden"
+            />
+          </label>
+        </div>
+        <p className="mb-3 text-sm text-neutral-500">
+          Your voice keeps playing — the frame just cuts over to this video for the time range below.
+        </p>
+        {videoOverlayUploadError && (
+          <p className="mb-3 text-sm text-red-600">{videoOverlayUploadError}</p>
+        )}
+
+        <ul className="space-y-3">
+          {videoOverlays.map((o, i) => (
+            <li key={i} className="rounded-md border border-neutral-200 p-3 text-sm">
+              <div className="flex items-center gap-3">
+                {o.previewUrl && (
+                  <video src={o.previewUrl} muted className="h-12 w-12 shrink-0 rounded object-cover" />
+                )}
+                <div className="flex-1">
+                  <EmphasisTimingScrubber
+                    start={o.start}
+                    end={o.end}
+                    duration={duration}
+                    onChange={(patch) => updateVideoOverlay(i, patch)}
+                  />
+                </div>
+                <button
+                  onClick={() => deleteVideoOverlay(i)}
+                  className="shrink-0 text-neutral-400 hover:text-red-600"
+                >
+                  Remove
+                </button>
+              </div>
+            </li>
+          ))}
+          {videoOverlays.length === 0 && (
+            <p className="text-sm text-neutral-500">No video overlays yet.</p>
           )}
         </ul>
       </section>

@@ -12,6 +12,7 @@ export const defaultProps: VideoCompositionProps = {
       words: [],
       emphasisMoments: [],
       imageOverlays: [],
+      videoOverlays: [],
       captionStyle: "static_block",
       captionFont: "airy",
       captionSizeMultiplier: 1,

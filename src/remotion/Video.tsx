@@ -57,6 +57,15 @@ export type ImageOverlayProps = {
   animationOut: OverlayEdge;
 };
 
+// A different video takes over the whole frame for [start, end] — the
+// original clip's own video (and its audio) keeps playing underneath, just
+// visually covered, which is what keeps "my voice is still there" true.
+export type VideoOverlayProps = {
+  videoUrl: string;
+  start: number;
+  end: number;
+};
+
 export type ClipInput = {
   videoUrl: string;
   sourceDurationSeconds: number;
@@ -64,6 +73,7 @@ export type ClipInput = {
   words: TranscriptWord[];
   emphasisMoments: EmphasisMomentProps[];
   imageOverlays: ImageOverlayProps[];
+  videoOverlays: VideoOverlayProps[];
   captionStyle: CaptionStyle;
   captionFont: string;
   captionSizeMultiplier: number;
@@ -121,6 +131,7 @@ export function VideoComposition({ clips, fontMap, headerTitle }: VideoCompositi
   })[] = [];
   const allEmphasis: EmphasisMomentProps[] = [];
   const allImageOverlays: ImageOverlayProps[] = [];
+  const allVideoOverlays: VideoOverlayProps[] = [];
 
   for (const { clip, keptSegments, offset } of timeline) {
     const localChunks = buildCaptionChunks(clip.words, keptSegments);
@@ -149,6 +160,13 @@ export function VideoComposition({ clips, fontMap, headerTitle }: VideoCompositi
       const mapped = mapRangeToOutputTime(o.start, o.end, keptSegments);
       if (mapped !== null) {
         allImageOverlays.push({ ...o, start: mapped.start + offset, end: mapped.end + offset });
+      }
+    }
+
+    for (const v of clip.videoOverlays) {
+      const mapped = mapRangeToOutputTime(v.start, v.end, keptSegments);
+      if (mapped !== null) {
+        allVideoOverlays.push({ ...v, start: mapped.start + offset, end: mapped.end + offset });
       }
     }
   }
@@ -188,6 +206,20 @@ export function VideoComposition({ clips, fontMap, headerTitle }: VideoCompositi
           })
         )}
       </AbsoluteFill>
+
+      {allVideoOverlays.map((overlay, i) => (
+        <Sequence
+          key={i}
+          from={Math.round(overlay.start * fps)}
+          durationInFrames={Math.max(1, Math.round((overlay.end - overlay.start) * fps))}
+        >
+          <OffthreadVideo
+            src={overlay.videoUrl}
+            muted
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        </Sequence>
+      ))}
 
       {activeImageOverlays.map((overlay, i) => (
         <ImageOverlayView key={i} overlay={overlay} />

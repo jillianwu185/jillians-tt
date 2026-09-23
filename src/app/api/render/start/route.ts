@@ -24,7 +24,9 @@ async function buildClipInput(
 
   const { data: recipe, error: recipeError } = await supabase
     .from("edit_recipes")
-    .select("id, cuts, emphasis_moments, image_overlays, caption_style, accent_color, font_map, header_title")
+    .select(
+      "id, cuts, emphasis_moments, image_overlays, video_overlays, caption_style, accent_color, font_map, header_title"
+    )
     .eq("video_id", videoId)
     .order("version", { ascending: false })
     .limit(1)
@@ -83,6 +85,20 @@ async function buildClipInput(
     })
   );
 
+  const videoOverlaysRaw = (recipe.video_overlays ?? []) as {
+    storagePath: string;
+    start: number;
+    end: number;
+  }[];
+  const videoOverlays = await Promise.all(
+    videoOverlaysRaw.map(async (v) => {
+      const { data: signed } = await supabase.storage
+        .from("overlay-videos")
+        .createSignedUrl(v.storagePath, 3600);
+      return { videoUrl: signed?.signedUrl ?? "", start: v.start, end: v.end };
+    })
+  );
+
   return {
     editRecipeId: recipe.id,
     headerTitle: recipe.header_title ?? null,
@@ -93,6 +109,7 @@ async function buildClipInput(
       words: transcript.words,
       emphasisMoments: approvedEmphasis,
       imageOverlays,
+      videoOverlays,
       captionStyle: recipe.caption_style ?? "static_block",
       captionFont: (fontMap.caption as string) ?? "airy",
       captionSizeMultiplier: (fontMap.captionSizeMultiplier as number) ?? 1,
