@@ -113,13 +113,19 @@ async function buildClipInput(
     storagePath: string;
     start: number;
     end: number;
+    behindSubject?: boolean;
   }[];
   const videoOverlays = await Promise.all(
     videoOverlaysRaw.map(async (v) => {
       const { data: signed } = await supabase.storage
         .from("overlay-videos")
         .createSignedUrl(v.storagePath, 3600);
-      return { videoUrl: signed?.signedUrl ?? "", start: v.start, end: v.end };
+      return {
+        videoUrl: signed?.signedUrl ?? "",
+        start: v.start,
+        end: v.end,
+        behindSubject: v.behindSubject ?? false,
+      };
     })
   );
 

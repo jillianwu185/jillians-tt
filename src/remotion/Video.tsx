@@ -63,10 +63,14 @@ export type ImageOverlayProps = {
 // A different video takes over the whole frame for [start, end] — the
 // original clip's own video (and its audio) keeps playing underneath, just
 // visually covered, which is what keeps "my voice is still there" true.
+// behindSubject: the speaker's cutout is redrawn on top of this overlay
+// (instead of the overlay covering everything, including the speaker) —
+// a virtual-background effect rather than a full takeover.
 export type VideoOverlayProps = {
   videoUrl: string;
   start: number;
   end: number;
+  behindSubject: boolean;
 };
 
 export type ClipInput = {
@@ -186,6 +190,8 @@ export function VideoComposition({ clips, fontMap, headerTitle }: VideoCompositi
   const activeImageOverlays = allImageOverlays.filter((o) => outputTime >= o.start && outputTime < o.end);
   const behindImageOverlays = activeImageOverlays.filter((o) => o.behindSubject);
   const frontImageOverlays = activeImageOverlays.filter((o) => !o.behindSubject);
+  const behindVideoOverlays = allVideoOverlays.filter((v) => v.behindSubject);
+  const frontVideoOverlays = allVideoOverlays.filter((v) => !v.behindSubject);
 
   const isZooming =
     activeEmphasis?.treatment === "punch_in_zoom" || activeEmphasis?.treatment === "both";
@@ -221,7 +227,21 @@ export function VideoComposition({ clips, fontMap, headerTitle }: VideoCompositi
         )}
       </AbsoluteFill>
 
-      {allVideoOverlays.map((overlay, i) => (
+      {frontVideoOverlays.map((overlay, i) => (
+        <Sequence
+          key={i}
+          from={Math.round(overlay.start * fps)}
+          durationInFrames={Math.max(1, Math.round((overlay.end - overlay.start) * fps))}
+        >
+          <OffthreadVideo
+            src={overlay.videoUrl}
+            muted
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        </Sequence>
+      ))}
+
+      {behindVideoOverlays.map((overlay, i) => (
         <Sequence
           key={i}
           from={Math.round(overlay.start * fps)}

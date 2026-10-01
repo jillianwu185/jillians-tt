@@ -51,6 +51,7 @@ type VideoOverlay = {
   previewUrl: string;
   start: number;
   end: number;
+  behindSubject: boolean;
 };
 
 type Font = { key: string; display_name: string; google_font_family: string };
@@ -187,13 +188,16 @@ export default function ReviewPage() {
       );
       setImageOverlays(overlaysWithPreview);
 
-      const rawVideoOverlays = (recipe.video_overlays ?? []) as Omit<VideoOverlay, "previewUrl">[];
+      const rawVideoOverlays = (recipe.video_overlays ?? []) as (Omit<
+        VideoOverlay,
+        "previewUrl" | "behindSubject"
+      > & { behindSubject?: boolean })[];
       const videoOverlaysWithPreview = await Promise.all(
         rawVideoOverlays.map(async (o) => {
           const { data: signed } = await supabase.storage
             .from("overlay-videos")
             .createSignedUrl(o.storagePath, 3600);
-          return { ...o, previewUrl: signed?.signedUrl ?? "" };
+          return { behindSubject: false, ...o, previewUrl: signed?.signedUrl ?? "" };
         })
       );
       setVideoOverlays(videoOverlaysWithPreview);
@@ -359,7 +363,7 @@ export default function ReviewPage() {
       const end = Math.min(start + 3, duration || start + 3);
       setVideoOverlays((prev) => [
         ...prev,
-        { storagePath, previewUrl: URL.createObjectURL(file), start, end },
+        { storagePath, previewUrl: URL.createObjectURL(file), start, end, behindSubject: false },
       ]);
     } catch (err) {
       setVideoOverlayUploadError(err instanceof Error ? err.message : "Video upload failed");
@@ -414,6 +418,7 @@ export default function ReviewPage() {
           storagePath: o.storagePath,
           start: o.start,
           end: o.end,
+          behindSubject: o.behindSubject,
         })),
         caption_style: captionStyle,
         accent_color: accentColor,
@@ -1024,6 +1029,16 @@ export default function ReviewPage() {
                   Remove
                 </button>
               </div>
+              <label className="mt-2 flex items-center gap-1 text-xs text-neutral-500">
+                <input
+                  type="checkbox"
+                  checked={o.behindSubject}
+                  disabled={subjectCutoutStatus !== "ready"}
+                  onChange={(e) => updateVideoOverlay(i, { behindSubject: e.target.checked })}
+                  className="accent-pink-400"
+                />
+                behind subject (shows you in front of this video instead of a full takeover)
+              </label>
             </li>
           ))}
           {videoOverlays.length === 0 && (
