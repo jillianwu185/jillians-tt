@@ -10,6 +10,25 @@ function findColumn(row: CsvRow, ...keywords: string[]): string | null {
   return key ?? null;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// React 19 auto-hoists any element literally named "title" as document
+// metadata, regardless of whether it's actually an SVG <title> (a hover
+// tooltip, unrelated to the document's <head><title>) — it server-renders
+// empty, then only gets real content on the client, which is a hydration
+// mismatch. Injecting it as a raw string sidesteps React's element-tree
+// hoisting check entirely (it never sees a "title"-typed element to hoist).
+function svgTitle(text: string): { dangerouslySetInnerHTML: { __html: string } } {
+  return { dangerouslySetInnerHTML: { __html: `<title>${escapeHtml(text)}</title>` } };
+}
+
 export default function RetentionChart({ rows }: { rows: CsvRow[] }) {
   if (rows.length === 0) return null;
 
@@ -93,11 +112,8 @@ export default function RetentionChart({ rows }: { rows: CsvRow[] }) {
                   height={(watchTimeValue / 100) * chartHeight}
                   fill={WATCH_TIME_COLOR}
                   rx={4}
-                >
-                  <title>
-                    {label}: {watchTimeValue}% avg watch time
-                  </title>
-                </rect>
+                  {...svgTitle(`${label}: ${watchTimeValue}% avg watch time`)}
+                />
               )}
               {retentionKey && (
                 <rect
@@ -107,11 +123,8 @@ export default function RetentionChart({ rows }: { rows: CsvRow[] }) {
                   height={(retentionValue / 100) * chartHeight}
                   fill={RETENTION_COLOR}
                   rx={4}
-                >
-                  <title>
-                    {label}: {retentionValue}% retention
-                  </title>
-                </rect>
+                  {...svgTitle(`${label}: ${retentionValue}% retention`)}
+                />
               )}
               <text
                 x={groupX + groupWidth / 2}
