@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { generatePerformanceSummary } from "@/lib/video-performance";
 
 export const maxDuration = 60;
 
@@ -83,7 +84,8 @@ async function handleSync(request: NextRequest) {
 
   const accessToken = await refreshAccessTokenIfNeeded(supabase, credentials);
 
-  const fields = "id,title,view_count,like_count,comment_count,share_count,create_time";
+  const fields =
+    "id,title,cover_image_url,view_count,like_count,comment_count,share_count,create_time";
   const videoListResponse = await fetch(
     `https://open.tiktokapis.com/v2/video/list/?fields=${fields}`,
     {
@@ -106,6 +108,7 @@ async function handleSync(request: NextRequest) {
   type TikTokVideo = {
     id: string;
     title: string;
+    cover_image_url: string;
     view_count: number;
     like_count: number;
     comment_count: number;
@@ -140,6 +143,8 @@ async function handleSync(request: NextRequest) {
       {
         tiktok_video_id: video.id,
         posted_at: postedAt.toISOString(),
+        title: video.title || null,
+        cover_image_url: video.cover_image_url || null,
         views: video.view_count,
         likes: video.like_count,
         comments: video.comment_count,
@@ -152,5 +157,49 @@ async function handleSync(request: NextRequest) {
     );
   }
 
+  await generateMissingPerformanceSummaries(supabase);
+
   return NextResponse.json({ synced: videos.length });
+}
+
+// Generated once per video (not refreshed on every sync) to avoid repeat
+// Claude calls/cost and the summary's verdict flip-flopping as stats
+// naturally fluctuate day to day.
+async function generateMissingPerformanceSummaries(supabase: SupabaseClient) {
+  const { data: allVideos } = await supabase
+    .from("tiktok_videos")
+    .select("id, title, views, likes, comments, shares, topic_tag, caption_style_tag, performance_summary");
+  if (!allVideos || allVideos.length === 0) return;
+
+  const count = allVideos.length;
+  const averages = {
+    avgViews: allVideos.reduce((sum, v) => sum + v.views, 0) / count,
+    avgLikes: allVideos.reduce((sum, v) => sum + v.likes, 0) / count,
+    avgComments: allVideos.reduce((sum, v) => sum + v.comments, 0) / count,
+    avgShares: allVideos.reduce((sum, v) => sum + v.shares, 0) / count,
+  };
+
+  const missing = allVideos.filter((v) => !v.performance_summary);
+  for (const video of missing) {
+    try {
+      const { verdict, summary } = await generatePerformanceSummary(
+        {
+          title: video.title,
+          views: video.views,
+          likes: video.likes,
+          comments: video.comments,
+          shares: video.shares,
+          topicTag: video.topic_tag,
+          captionStyleTag: video.caption_style_tag,
+        },
+        averages
+      );
+      await supabase
+        .from("tiktok_videos")
+        .update({ performance_verdict: verdict, performance_summary: summary })
+        .eq("id", video.id);
+    } catch {
+      // Leave performance_summary null — it'll retry on the next sync.
+    }
+  }
 }

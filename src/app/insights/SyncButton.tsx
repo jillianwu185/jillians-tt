@@ -23,9 +23,9 @@ export default function SyncButton() {
     <button
       onClick={handleSync}
       disabled={status === "syncing"}
-      className="rounded-md bg-black px-4 py-2 text-sm text-white"
+      className="rounded-full bg-sky-400 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
     >
-      {status === "syncing" ? "Syncing…" : status === "error" ? "Sync failed, retry" : "Sync now"}
+      {status === "syncing" ? "Syncing…" : status === "error" ? "Sync failed, retry" : "🔄 Sync now"}
     </button>
   );
 }

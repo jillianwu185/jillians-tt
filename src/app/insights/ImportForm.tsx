@@ -41,22 +41,22 @@ export default function ImportForm() {
   return (
     <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3 text-sm">
       <div>
-        <label className="mb-1 block text-neutral-600">Export covers</label>
+        <label className="mb-1 block text-neutral-500">Export covers</label>
         <div className="flex items-center gap-2">
           <input
             type="date"
             required
             value={dateRangeStart}
             onChange={(e) => setDateRangeStart(e.target.value)}
-            className="rounded border border-neutral-300 px-2 py-1.5"
+            className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5"
           />
-          <span>to</span>
+          <span className="text-neutral-400">to</span>
           <input
             type="date"
             required
             value={dateRangeEnd}
             onChange={(e) => setDateRangeEnd(e.target.value)}
-            className="rounded border border-neutral-300 px-2 py-1.5"
+            className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5"
           />
         </div>
       </div>
@@ -64,7 +64,7 @@ export default function ImportForm() {
       <button
         type="submit"
         disabled={status === "uploading"}
-        className="rounded-md bg-black px-4 py-2 text-white"
+        className="rounded-full bg-amber-400 px-5 py-2.5 font-medium text-white shadow-sm transition hover:bg-amber-500 disabled:opacity-60"
       >
         {status === "uploading" ? "Importing…" : "Import Studio export"}
       </button>
