@@ -17,7 +17,9 @@ async function buildClipInput(
 ): Promise<{ clip: ClipInput; editRecipeId: string; headerTitle: string | null } | { error: string }> {
   const { data: video, error: videoError } = await supabase
     .from("videos")
-    .select("id, storage_path, duration_seconds")
+    .select(
+      "id, storage_path, duration_seconds, subject_cutout_foreground_path, subject_cutout_alpha_path, subject_cutout_status"
+    )
     .eq("id", videoId)
     .single();
   if (videoError || !video) return { error: `Video ${videoId} not found` };
@@ -48,14 +50,34 @@ async function buildClipInput(
   const acceptedCuts = (recipe.cuts ?? []).filter((c: { accepted: boolean }) => c.accepted);
   const approvedEmphasis = (recipe.emphasis_moments ?? [])
     .filter((m: { approved: boolean }) => m.approved)
-    .map((m: { calloutFontSize?: number; calloutX?: number; calloutY?: number }) => ({
+    .map((m: { calloutFontSize?: number; calloutX?: number; calloutY?: number; behindSubject?: boolean }) => ({
       calloutFontSize: 140,
       calloutX: 50,
       calloutY: 50,
+      behindSubject: false,
       ...m,
     }));
 
   const fontMap = (recipe.font_map ?? {}) as Record<string, string | number>;
+
+  const subjectCutoutReady =
+    video.subject_cutout_status === "ready" &&
+    video.subject_cutout_foreground_path &&
+    video.subject_cutout_alpha_path;
+  const subjectCutoutForegroundUrl = subjectCutoutReady
+    ? (
+        await supabase.storage
+          .from("subject-cutouts")
+          .createSignedUrl(video.subject_cutout_foreground_path, 3600)
+      ).data?.signedUrl
+    : undefined;
+  const subjectCutoutAlphaUrl = subjectCutoutReady
+    ? (
+        await supabase.storage
+          .from("subject-cutouts")
+          .createSignedUrl(video.subject_cutout_alpha_path, 3600)
+      ).data?.signedUrl
+    : undefined;
 
   const imageOverlaysRaw = (recipe.image_overlays ?? []) as {
     storagePath: string;
@@ -66,6 +88,7 @@ async function buildClipInput(
     widthPercent: number;
     animationIn: OverlayEdge;
     animationOut: OverlayEdge;
+    behindSubject?: boolean;
   }[];
   const imageOverlays = await Promise.all(
     imageOverlaysRaw.map(async (o) => {
@@ -81,6 +104,7 @@ async function buildClipInput(
         widthPercent: o.widthPercent,
         animationIn: o.animationIn,
         animationOut: o.animationOut,
+        behindSubject: o.behindSubject ?? false,
       };
     })
   );
@@ -114,6 +138,8 @@ async function buildClipInput(
       captionFont: (fontMap.caption as string) ?? "airy",
       captionSizeMultiplier: (fontMap.captionSizeMultiplier as number) ?? 1,
       accentColor: recipe.accent_color ?? "#FCEF91",
+      subjectCutoutForegroundUrl,
+      subjectCutoutAlphaUrl,
     },
   };
 }

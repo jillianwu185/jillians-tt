@@ -27,6 +27,7 @@ type EmphasisMoment = {
   calloutColor: string;
   calloutX: number;
   calloutY: number;
+  behindSubject: boolean;
   [key: string]: unknown;
 };
 
@@ -42,6 +43,7 @@ type ImageOverlay = {
   widthPercent: number;
   animationIn: OverlayEdge;
   animationOut: OverlayEdge;
+  behindSubject: boolean;
 };
 
 type VideoOverlay = {
@@ -107,6 +109,11 @@ export default function ReviewPage() {
   const [renderProgress, setRenderProgress] = useState(0);
   const [pastRenders, setPastRenders] = useState<{ id: string; rendered_at: string; url: string }[]>([]);
 
+  const [subjectCutoutStatus, setSubjectCutoutStatus] = useState<
+    "none" | "processing" | "ready" | "error"
+  >("none");
+  const [subjectCutoutError, setSubjectCutoutError] = useState("");
+
   const videoRef = useRef<HTMLVideoElement>(null);
 
   async function loadFonts() {
@@ -156,6 +163,7 @@ export default function ReviewPage() {
           calloutFontSize: 140,
           calloutX: 50,
           calloutY: 50,
+          behindSubject: false,
           ...m,
         })) as EmphasisMoment[]
       );
@@ -165,13 +173,16 @@ export default function ReviewPage() {
       setCaptionFont((fontMap.caption as string) ?? "airy");
       setCaptionSizeMultiplier((fontMap.captionSizeMultiplier as number) ?? 1);
 
-      const rawOverlays = (recipe.image_overlays ?? []) as Omit<ImageOverlay, "previewUrl">[];
+      const rawOverlays = (recipe.image_overlays ?? []) as (Omit<
+        ImageOverlay,
+        "previewUrl" | "behindSubject"
+      > & { behindSubject?: boolean })[];
       const overlaysWithPreview = await Promise.all(
         rawOverlays.map(async (o) => {
           const { data: signed } = await supabase.storage
             .from("overlay-images")
             .createSignedUrl(o.storagePath, 3600);
-          return { ...o, previewUrl: signed?.signedUrl ?? "" };
+          return { behindSubject: false, ...o, previewUrl: signed?.signedUrl ?? "" };
         })
       );
       setImageOverlays(overlaysWithPreview);
@@ -195,7 +206,7 @@ export default function ReviewPage() {
 
       const { data: video, error: videoError } = await supabase
         .from("videos")
-        .select("duration_seconds, storage_path")
+        .select("duration_seconds, storage_path, subject_cutout_status, subject_cutout_error")
         .eq("id", videoId)
         .single();
       if (videoError || !video) {
@@ -204,6 +215,10 @@ export default function ReviewPage() {
         return;
       }
       setDuration(video.duration_seconds);
+      setSubjectCutoutStatus(
+        (video.subject_cutout_status as "none" | "processing" | "ready" | "error") ?? "none"
+      );
+      setSubjectCutoutError(video.subject_cutout_error ?? "");
 
       const { data: signedUrlData } = await supabase.storage
         .from("videos")
@@ -299,6 +314,7 @@ export default function ReviewPage() {
           widthPercent: 40,
           animationIn: "bottom",
           animationOut: "top",
+          behindSubject: false,
         },
       ]);
     } catch (err) {
@@ -392,6 +408,7 @@ export default function ReviewPage() {
           widthPercent: o.widthPercent,
           animationIn: o.animationIn,
           animationOut: o.animationOut,
+          behindSubject: o.behindSubject,
         })),
         video_overlays: videoOverlays.map((o) => ({
           storagePath: o.storagePath,
@@ -477,6 +494,48 @@ export default function ReviewPage() {
     } catch (err) {
       setRenderErrorMessage(err instanceof Error ? err.message : "Render failed");
       setRenderState("error");
+    }
+  }
+
+  async function handleGenerateSubjectCutout() {
+    setSubjectCutoutStatus("processing");
+    setSubjectCutoutError("");
+    try {
+      const startResponse = await fetch("/api/videos/subject-cutout/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ video_id: videoId }),
+      });
+      const startResult = await startResponse.json();
+      if (!startResponse.ok) throw new Error(startResult.error ?? "Subject cutout failed to start");
+
+      const { foregroundPredictionId, alphaPredictionId } = startResult;
+
+      // Poll every 5s. Two matting runs plus an ffmpeg merge can take a couple minutes.
+      for (let attempt = 0; attempt < 60; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        const statusResponse = await fetch("/api/videos/subject-cutout/status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            video_id: videoId,
+            foreground_prediction_id: foregroundPredictionId,
+            alpha_prediction_id: alphaPredictionId,
+          }),
+        });
+        const statusResult = await statusResponse.json();
+        if (!statusResponse.ok) throw new Error(statusResult.error ?? "Subject cutout failed");
+
+        if (statusResult.done) {
+          if (statusResult.error) throw new Error(statusResult.error);
+          setSubjectCutoutStatus("ready");
+          return;
+        }
+      }
+      throw new Error("Subject cutout is taking longer than expected — check back shortly");
+    } catch (err) {
+      setSubjectCutoutError(err instanceof Error ? err.message : "Subject cutout failed");
+      setSubjectCutoutStatus("error");
     }
   }
 
@@ -665,6 +724,33 @@ export default function ReviewPage() {
       </section>
 
       <section className="mb-8">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-medium">Subject cutout</h2>
+          <button
+            onClick={handleGenerateSubjectCutout}
+            disabled={subjectCutoutStatus === "processing"}
+            className="rounded-full bg-black px-3 py-1.5 text-xs text-white disabled:opacity-50"
+          >
+            {subjectCutoutStatus === "processing"
+              ? "Generating… (~1-2 min)"
+              : subjectCutoutStatus === "ready"
+                ? "Regenerate"
+                : "Generate"}
+          </button>
+        </div>
+        <p className="text-sm text-neutral-500">
+          {subjectCutoutStatus === "ready"
+            ? "Ready — overlays and callouts can now be set to appear behind you."
+            : subjectCutoutStatus === "error"
+              ? "Failed — see error below."
+              : "Extracts a cutout of you from the raw footage, so overlays and callouts can be set to render behind you instead of on top."}
+        </p>
+        {subjectCutoutStatus === "error" && subjectCutoutError && (
+          <p className="mt-2 text-sm text-red-600">{subjectCutoutError}</p>
+        )}
+      </section>
+
+      <section className="mb-8">
         <h2 className="mb-3 text-lg font-medium">
           Emphasis moments ({emphasisMoments.length})
         </h2>
@@ -763,6 +849,15 @@ export default function ReviewPage() {
                       y={m.calloutY}
                       onChange={(patch) => updateEmphasis(i, { calloutX: patch.x, calloutY: patch.y })}
                     />
+                    <label className="flex items-center gap-1 text-xs text-neutral-500">
+                      <input
+                        type="checkbox"
+                        checked={m.behindSubject}
+                        disabled={subjectCutoutStatus !== "ready"}
+                        onChange={(e) => updateEmphasis(i, { behindSubject: e.target.checked })}
+                      />
+                      behind subject
+                    </label>
                   </>
                 )}
               </div>
@@ -864,6 +959,15 @@ export default function ReviewPage() {
                   </select>
                 </label>
                 <PositionPad x={o.x} y={o.y} onChange={(patch) => updateImageOverlay(i, patch)} />
+                <label className="flex items-center gap-1 text-xs text-neutral-500">
+                  <input
+                    type="checkbox"
+                    checked={o.behindSubject}
+                    disabled={subjectCutoutStatus !== "ready"}
+                    onChange={(e) => updateImageOverlay(i, { behindSubject: e.target.checked })}
+                  />
+                  behind subject
+                </label>
               </div>
             </li>
           ))}

@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import {
   AbsoluteFill,
   Img,
@@ -31,6 +32,7 @@ export type EmphasisMomentProps = {
   calloutFontSize: number;
   calloutX: number;
   calloutY: number;
+  behindSubject: boolean;
 };
 
 export type CaptionStyle =
@@ -55,6 +57,7 @@ export type ImageOverlayProps = {
   widthPercent: number;
   animationIn: OverlayEdge;
   animationOut: OverlayEdge;
+  behindSubject: boolean;
 };
 
 // A different video takes over the whole frame for [start, end] — the
@@ -78,6 +81,13 @@ export type ClipInput = {
   captionFont: string;
   captionSizeMultiplier: number;
   accentColor: string;
+  // A cutout of just the speaker (from Robust Video Matting), frame-aligned
+  // to `videoUrl`'s original (uncut) timeline, stored as two plain videos —
+  // the opaque foreground and a grayscale alpha matte — and composited via
+  // canvas at render time (see SubjectCutoutView). Redrawn on top of "behind
+  // subject" overlays/callouts so the speaker appears in front of them.
+  subjectCutoutForegroundUrl?: string;
+  subjectCutoutAlphaUrl?: string;
 };
 
 export type VideoCompositionProps = {
@@ -174,11 +184,15 @@ export function VideoComposition({ clips, fontMap, headerTitle }: VideoCompositi
   const activeCaption = allCaptionChunks.find((c) => outputTime >= c.start && outputTime < c.end);
   const activeEmphasis = allEmphasis.find((m) => outputTime >= m.start && outputTime < m.end);
   const activeImageOverlays = allImageOverlays.filter((o) => outputTime >= o.start && outputTime < o.end);
+  const behindImageOverlays = activeImageOverlays.filter((o) => o.behindSubject);
+  const frontImageOverlays = activeImageOverlays.filter((o) => !o.behindSubject);
 
   const isZooming =
     activeEmphasis?.treatment === "punch_in_zoom" || activeEmphasis?.treatment === "both";
   const isCallout =
     activeEmphasis?.treatment === "keyword_callout" || activeEmphasis?.treatment === "both";
+  const isCalloutBehind = isCallout && activeEmphasis?.behindSubject === true;
+  const isCalloutFront = isCallout && activeEmphasis?.behindSubject !== true;
 
   return (
     <AbsoluteFill style={{ backgroundColor: "black" }}>
@@ -221,7 +235,41 @@ export function VideoComposition({ clips, fontMap, headerTitle }: VideoCompositi
         </Sequence>
       ))}
 
-      {activeImageOverlays.map((overlay, i) => (
+      {behindImageOverlays.map((overlay, i) => (
+        <ImageOverlayView key={i} overlay={overlay} />
+      ))}
+
+      {isCalloutBehind && activeEmphasis && (
+        <CalloutView emphasis={activeEmphasis} fontFamily={resolveFont(activeEmphasis.calloutFont)} />
+      )}
+
+      {timeline.map(({ clip, keptSegments, offset }, clipIndex) => {
+        const foregroundUrl = clip.subjectCutoutForegroundUrl;
+        const alphaUrl = clip.subjectCutoutAlphaUrl;
+        if (!foregroundUrl || !alphaUrl) return null;
+        return keptSegments.map((seg, segIndex) => {
+              const fromFrame = Math.round((offset + seg.outputStart) * fps);
+              const durationInFrames = Math.max(
+                1,
+                Math.round((seg.outputEnd - seg.outputStart) * fps)
+              );
+              return (
+                <Sequence
+                  key={`cutout-${clipIndex}-${segIndex}`}
+                  from={fromFrame}
+                  durationInFrames={durationInFrames}
+                >
+                  <SubjectCutoutView
+                    foregroundUrl={foregroundUrl}
+                    alphaUrl={alphaUrl}
+                    startFrom={Math.round(seg.sourceStart * fps)}
+                  />
+                </Sequence>
+              );
+        });
+      })}
+
+      {frontImageOverlays.map((overlay, i) => (
         <ImageOverlayView key={i} overlay={overlay} />
       ))}
 
@@ -236,26 +284,8 @@ export function VideoComposition({ clips, fontMap, headerTitle }: VideoCompositi
         />
       )}
 
-      {isCallout && activeEmphasis && (
-        <AbsoluteFill style={{ pointerEvents: "none" }}>
-          <div
-            style={{
-              position: "absolute",
-              left: `${activeEmphasis.calloutX}%`,
-              top: `${activeEmphasis.calloutY}%`,
-              transform: "translate(-50%, -50%)",
-              fontFamily: resolveFont(activeEmphasis.calloutFont),
-              fontSize: activeEmphasis.calloutFontSize,
-              fontWeight: 800,
-              color: activeEmphasis.calloutColor,
-              textAlign: "center",
-              maxWidth: "80%",
-              textShadow: "0 4px 24px rgba(0,0,0,0.5)",
-            }}
-          >
-            {activeEmphasis.calloutText}
-          </div>
-        </AbsoluteFill>
+      {isCalloutFront && activeEmphasis && (
+        <CalloutView emphasis={activeEmphasis} fontFamily={resolveFont(activeEmphasis.calloutFont)} />
       )}
 
       {headerTitle && clips[0] && (
@@ -265,6 +295,36 @@ export function VideoComposition({ clips, fontMap, headerTitle }: VideoCompositi
           accentColor={clips[0].accentColor}
         />
       )}
+    </AbsoluteFill>
+  );
+}
+
+function CalloutView({
+  emphasis,
+  fontFamily,
+}: {
+  emphasis: EmphasisMomentProps;
+  fontFamily: string;
+}) {
+  return (
+    <AbsoluteFill style={{ pointerEvents: "none" }}>
+      <div
+        style={{
+          position: "absolute",
+          left: `${emphasis.calloutX}%`,
+          top: `${emphasis.calloutY}%`,
+          transform: "translate(-50%, -50%)",
+          fontFamily,
+          fontSize: emphasis.calloutFontSize,
+          fontWeight: 800,
+          color: emphasis.calloutColor,
+          textAlign: "center",
+          maxWidth: "80%",
+          textShadow: "0 4px 24px rgba(0,0,0,0.5)",
+        }}
+      >
+        {emphasis.calloutText}
+      </div>
     </AbsoluteFill>
   );
 }
@@ -567,5 +627,97 @@ function ImageOverlayView({ overlay }: { overlay: ImageOverlayProps }) {
         opacity,
       }}
     />
+  );
+}
+
+// Composites a foreground-only video with a separate grayscale alpha matte
+// via canvas, rather than a single alpha-channel video file. A merged ProRes
+// 4444 alpha file for a full clip runs several hundred MB (its alpha plane
+// ignores bitrate/quality targeting) and exceeded Supabase's upload cap —
+// two plain H.264 videos are an order of magnitude smaller. Verified this
+// composites correctly (real transparency, not a black box) via a local
+// render spike before building it this way.
+function SubjectCutoutView({
+  foregroundUrl,
+  alphaUrl,
+  startFrom,
+}: {
+  foregroundUrl: string;
+  alphaUrl: string;
+  startFrom: number;
+}) {
+  const { width, height } = useVideoConfig();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Each incoming frame is baked into its own persistent canvas the instant
+  // it arrives, rather than holding onto the raw (ephemeral) frame handle
+  // across the async gap until both callbacks have fired — under Remotion
+  // Lambda's render farm, a frame handle held that long can go stale
+  // ("broken" HTMLImageElement) even though a single-frame local test never
+  // surfaced it.
+  const foregroundCanvasRef = useRef<HTMLCanvasElement>(null);
+  const maskCanvasRef = useRef<HTMLCanvasElement>(null);
+  const foregroundReadyRef = useRef(false);
+  const alphaReadyRef = useRef(false);
+
+  function tryComposite() {
+    const canvas = canvasRef.current;
+    const foregroundCanvas = foregroundCanvasRef.current;
+    const maskCanvas = maskCanvasRef.current;
+    if (!canvas || !foregroundCanvas || !maskCanvas) return;
+    if (!foregroundReadyRef.current || !alphaReadyRef.current) return;
+
+    const ctx = canvas.getContext("2d")!;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.drawImage(foregroundCanvas, 0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = "destination-in";
+    ctx.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height);
+  }
+
+  return (
+    <>
+      <OffthreadVideo
+        src={foregroundUrl}
+        startFrom={startFrom}
+        style={{ display: "none" }}
+        onVideoFrame={(frame) => {
+          const canvas = foregroundCanvasRef.current;
+          if (!canvas) return;
+          canvas.getContext("2d")!.drawImage(frame, 0, 0, canvas.width, canvas.height);
+          foregroundReadyRef.current = true;
+          tryComposite();
+        }}
+      />
+      <OffthreadVideo
+        src={alphaUrl}
+        startFrom={startFrom}
+        style={{ display: "none" }}
+        onVideoFrame={(frame) => {
+          const canvas = maskCanvasRef.current;
+          if (!canvas) return;
+          const ctx = canvas.getContext("2d")!;
+          ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
+          // The alpha matte arrives as a grayscale video (no real alpha
+          // channel) — convert its luminance into this canvas's own alpha
+          // channel so it can be used as a destination-in mask.
+          const maskData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const data = maskData.data;
+          for (let i = 0; i < data.length; i += 4) {
+            data[i + 3] = data[i];
+          }
+          ctx.putImageData(maskData, 0, 0);
+          alphaReadyRef.current = true;
+          tryComposite();
+        }}
+      />
+      <canvas ref={foregroundCanvasRef} width={width} height={height} style={{ display: "none" }} />
+      <canvas ref={maskCanvasRef} width={width} height={height} style={{ display: "none" }} />
+      <canvas
+        ref={canvasRef}
+        width={width}
+        height={height}
+        style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%" }}
+      />
+    </>
   );
 }
