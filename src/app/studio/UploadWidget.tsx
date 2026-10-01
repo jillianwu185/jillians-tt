@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { compressVideoForUpload } from "@/lib/compress-video";
 
-type Status = "idle" | "uploading" | "transcribing" | "error";
+type Status = "idle" | "compressing" | "uploading" | "transcribing" | "error";
 
 // Supabase's own per-file cap was raised (Pro plan) well past this — this is
 // just a sanity ceiling against an accidental huge/wrong file selection.
@@ -31,13 +32,34 @@ export default function UploadWidget() {
   async function uploadAndTranscribe(
     file: File,
     userId: string,
-    extra: Record<string, unknown>
+    extra: Record<string, unknown>,
+    labelPrefix: string
   ): Promise<string> {
     const supabase = createClient();
     const duration = await getDuration(file);
-    const storagePath = `${userId}/${Date.now()}-${file.name}`;
 
-    const { error: uploadError } = await supabase.storage.from("videos").upload(storagePath, file);
+    let fileToUpload = file;
+    setStatus("compressing");
+    setProgressLabel(`${labelPrefix}Compressing…`);
+    try {
+      fileToUpload = await compressVideoForUpload(file, (ratio) => {
+        setProgressLabel(`${labelPrefix}Compressing… ${Math.round(ratio * 100)}%`);
+      });
+    } catch (err) {
+      // Compression is a speed optimization, not a requirement — if it fails
+      // for any reason (unsupported browser, out of memory, etc.) fall back
+      // to uploading the original file rather than blocking the upload.
+      console.warn("Video compression failed, uploading original file instead:", err);
+      fileToUpload = file;
+    }
+
+    setStatus("uploading");
+    setProgressLabel(`${labelPrefix}Uploading…`);
+    const storagePath = `${userId}/${Date.now()}-${fileToUpload.name}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("videos")
+      .upload(storagePath, fileToUpload);
     if (uploadError) throw uploadError;
 
     const { data: videoRow, error: insertError } = await supabase
@@ -52,6 +74,8 @@ export default function UploadWidget() {
       .single();
     if (insertError) throw insertError;
 
+    setStatus("transcribing");
+    setProgressLabel(`${labelPrefix}Transcribing…`);
     const transcribeResponse = await fetch("/api/transcribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -78,7 +102,6 @@ export default function UploadWidget() {
       return;
     }
 
-    setStatus("uploading");
     setErrorMessage("");
 
     try {
@@ -89,8 +112,7 @@ export default function UploadWidget() {
       if (!user) throw new Error("Not signed in");
 
       if (files.length === 1) {
-        setStatus("transcribing");
-        const videoId = await uploadAndTranscribe(files[0], user.id, {});
+        const videoId = await uploadAndTranscribe(files[0], user.id, {}, "");
         router.push(`/studio/${videoId}`);
         return;
       }
@@ -103,12 +125,12 @@ export default function UploadWidget() {
       if (projectError) throw projectError;
 
       for (let i = 0; i < files.length; i++) {
-        setProgressLabel(`Clip ${i + 1} of ${files.length}…`);
-        setStatus(i === 0 ? "uploading" : "uploading");
-        await uploadAndTranscribe(files[i], user.id, {
-          project_id: project.id,
-          sequence_order: i,
-        });
+        await uploadAndTranscribe(
+          files[i],
+          user.id,
+          { project_id: project.id, sequence_order: i },
+          `Clip ${i + 1} of ${files.length}: `
+        );
       }
 
       setProgressLabel("Styling your video…");
@@ -131,8 +153,9 @@ export default function UploadWidget() {
       <label className="flex w-full cursor-pointer flex-col items-center gap-2 rounded-3xl border-2 border-dashed border-sky-200 bg-sky-50 px-6 py-12 transition hover:border-sky-300 hover:bg-sky-100">
         <span className="text-2xl">📹</span>
         <span className="font-medium text-neutral-700">
+          {status === "compressing" && (progressLabel || "Compressing…")}
           {status === "uploading" && (progressLabel || "Uploading…")}
-          {status === "transcribing" && "Transcribing…"}
+          {status === "transcribing" && (progressLabel || "Transcribing…")}
           {(status === "idle" || status === "error") && "Choose one or more videos"}
         </span>
         {(status === "idle" || status === "error") && (
@@ -146,7 +169,7 @@ export default function UploadWidget() {
           multiple
           className="hidden"
           onChange={handleFileChange}
-          disabled={status === "uploading" || status === "transcribing"}
+          disabled={status === "compressing" || status === "uploading" || status === "transcribing"}
         />
       </label>
 
