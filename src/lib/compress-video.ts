@@ -32,6 +32,15 @@ async function getFFmpeg(): Promise<FFmpeg> {
 // times over with no perceptible quality loss, which directly cuts upload
 // time (the bottleneck is the user's upload bandwidth, not server
 // processing, so fewer bytes is the only thing that actually helps).
+//
+// Capping the long edge at 1920px matters even more than CRF: a 4K source
+// (3840x2160 or 2160x3840) is ~4x the pixels of this app's actual 1080x1920
+// output, and a single-threaded WASM software encoder is slow enough that
+// encoding 4K can take *longer* than just uploading the original file would
+// have (observed: ~10 minutes for a 185MB 4K clip). Downscaling to the
+// resolution the video ends up at anyway removes that 4x cost with zero
+// quality loss in the final render, and "ultrafast" trades a little
+// compression efficiency for speed now that the pixel count is already cut.
 export async function compressVideoForUpload(
   file: File,
   onProgress?: (ratio: number) => void
@@ -51,10 +60,16 @@ export async function compressVideoForUpload(
     await ffmpeg.exec([
       "-i",
       inputName,
+      "-vf",
+      // Cap whichever dimension is the long edge at 1920 (never upscale);
+      // the other dimension is derived (-2 keeps it even, required by
+      // yuv420p). Long-edge-aware so it's correct for both portrait and
+      // landscape source footage.
+      "scale='if(gt(iw\\,ih)\\,min(1920\\,iw)\\,-2)':'if(gt(iw\\,ih)\\,-2\\,min(1920\\,ih))'",
       "-c:v",
       "libx264",
       "-preset",
-      "veryfast",
+      "ultrafast",
       "-crf",
       "28",
       "-pix_fmt",
