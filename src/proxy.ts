@@ -9,7 +9,13 @@ export async function proxy(request: NextRequest) {
   if (
     pathname === "/" ||
     PUBLIC_PATHS.some((path) => pathname.startsWith(path)) ||
-    pathname.startsWith("/api/auth/") ||
+    // Every API route already checks auth itself (session cookie or, for
+    // crons/webhooks like /api/tiktok/sync, a bearer secret) and returns a
+    // proper 401 JSON response. Gating them here too meant an unauthenticated
+    // caller with no session cookie — e.g. Vercel Cron — got redirected to
+    // /login (a 307 HTML redirect) before ever reaching that check, silently
+    // breaking the daily TikTok sync cron for over a week.
+    pathname.startsWith("/api/") ||
     pathname.startsWith("/_next") ||
     pathname.match(/\.(?:svg|png|jpg|jpeg|txt|ico)$/)
   ) {
