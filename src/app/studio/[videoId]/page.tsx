@@ -547,9 +547,9 @@ export default function ReviewPage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-16">
-      <h1 className="mb-2 text-2xl font-semibold">Review cuts</h1>
-      <p className="mb-6 text-neutral-600">
+    <main className="mx-auto max-w-2xl px-6 py-14">
+      <h1 className="mb-2 text-3xl font-bold text-neutral-800">Review cuts ✂️</h1>
+      <p className="mb-6 text-neutral-500">
         Nudge cut points, style everything directly, or use the prompter below.
       </p>
 
@@ -558,14 +558,14 @@ export default function ReviewPage() {
           ref={videoRef}
           src={videoUrl}
           controls
-          className="mb-6 w-full rounded-lg"
+          className="mb-6 w-full rounded-2xl shadow-sm"
           onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
         />
       )}
 
-      <div className="relative mb-8 h-10 w-full rounded-md bg-neutral-100">
+      <div className="relative mb-8 h-10 w-full rounded-full bg-neutral-100">
         <div
-          className="absolute top-0 h-full w-px bg-black"
+          className="absolute top-0 h-full w-px bg-sky-400"
           style={{ left: `${(currentTime / duration) * 100}%` }}
         />
         {cuts.map((c, i) => (
@@ -573,7 +573,7 @@ export default function ReviewPage() {
             key={i}
             title={`${c.reason}: ${c.start.toFixed(2)}s–${c.end.toFixed(2)}s`}
             className={`absolute top-0 h-full ${
-              c.accepted ? "bg-red-300" : "bg-neutral-300"
+              c.accepted ? "bg-pink-300" : "bg-neutral-300"
             }`}
             style={{
               left: `${(c.start / duration) * 100}%`,
@@ -583,8 +583,8 @@ export default function ReviewPage() {
         ))}
       </div>
 
-      <section className="mb-10">
-        <h2 className="mb-3 text-lg font-medium">Style</h2>
+      <section className="mb-6 rounded-3xl bg-sky-50 p-6">
+        <h2 className="mb-3 text-lg font-semibold text-neutral-800">🎨 Style</h2>
 
         <p className="mb-2 text-sm font-medium text-neutral-700">
           Header title <span className="font-normal text-neutral-400">(shown above your head, whole video)</span>
@@ -594,7 +594,7 @@ export default function ReviewPage() {
           value={headerTitle}
           onChange={(e) => setHeaderTitle(e.target.value)}
           placeholder="auto-generated after transcription"
-          className="mb-4 w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
+          className="mb-4 w-full rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-sm"
         />
 
         <p className="mb-2 text-sm font-medium text-neutral-700">Caption style</p>
@@ -603,8 +603,10 @@ export default function ReviewPage() {
             <button
               key={style}
               onClick={() => setCaptionStyle(style)}
-              className={`rounded-full px-3 py-1.5 text-sm ${
-                captionStyle === style ? "bg-black text-white" : "bg-neutral-100 text-neutral-600"
+              className={`rounded-full px-3 py-1.5 text-sm transition ${
+                captionStyle === style
+                  ? "bg-sky-400 text-white shadow-sm"
+                  : "bg-white text-neutral-600 hover:bg-sky-100"
               }`}
             >
               {style.replace(/_/g, " ")}
@@ -617,7 +619,7 @@ export default function ReviewPage() {
           <select
             value={captionFont}
             onChange={(e) => setCaptionFont(e.target.value)}
-            className="rounded border border-neutral-300 px-2 py-1.5 text-sm"
+            className="rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-sm"
           >
             {fonts.map((f) => (
               <option key={f.key} value={f.key}>
@@ -632,7 +634,7 @@ export default function ReviewPage() {
             step={0.1}
             value={captionSizeMultiplier}
             onChange={(e) => setCaptionSizeMultiplier(parseFloat(e.target.value))}
-            className="w-32"
+            className="w-32 accent-sky-400"
           />
           <span className="text-xs text-neutral-500">{captionSizeMultiplier.toFixed(1)}x</span>
         </div>
@@ -645,7 +647,7 @@ export default function ReviewPage() {
               onClick={() => setAccentColor(hex)}
               title={name}
               className={`h-8 w-8 rounded-full border-2 ${
-                accentColor === hex ? "border-black" : "border-transparent"
+                accentColor === hex ? "border-sky-400" : "border-transparent"
               }`}
               style={{ backgroundColor: hex }}
             />
@@ -654,7 +656,7 @@ export default function ReviewPage() {
             type="color"
             value={accentColor}
             onChange={(e) => setAccentColor(e.target.value)}
-            className="h-8 w-8 rounded border border-neutral-300"
+            className="h-8 w-8 rounded-full border border-neutral-200"
           />
         </div>
 
@@ -668,12 +670,12 @@ export default function ReviewPage() {
               value={newFontName}
               onChange={(e) => setNewFontName(e.target.value)}
               placeholder="Any Google Font name, e.g. Bebas Neue"
-              className="flex-1 rounded border border-neutral-300 px-2 py-1.5"
+              className="flex-1 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5"
             />
             <button
               type="submit"
               disabled={addFontState === "adding"}
-              className="rounded bg-black px-3 py-1.5 text-white"
+              className="rounded-full bg-sky-400 px-3 py-1.5 font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-50"
             >
               {addFontState === "adding" ? "Adding…" : "Add"}
             </button>
@@ -682,13 +684,13 @@ export default function ReviewPage() {
         </details>
       </section>
 
-      <section className="mb-8">
-        <h2 className="mb-3 text-lg font-medium">Suggested cuts ({cuts.length})</h2>
+      <section className="mb-6 rounded-3xl bg-amber-50 p-6">
+        <h2 className="mb-3 text-lg font-semibold text-neutral-800">✂️ Suggested cuts ({cuts.length})</h2>
         <ul className="space-y-3">
           {cuts.map((c, i) => (
             <li
               key={i}
-              className="flex flex-wrap items-center gap-3 rounded-md border border-neutral-200 p-3 text-sm"
+              className="flex flex-wrap items-center gap-3 rounded-2xl bg-white p-3 text-sm shadow-sm ring-1 ring-neutral-100"
             >
               <span className="w-24 shrink-0 font-medium">{c.reason}</span>
               <input
@@ -696,7 +698,7 @@ export default function ReviewPage() {
                 step={0.01}
                 value={c.start}
                 onChange={(e) => updateCut(i, { start: parseFloat(e.target.value) })}
-                className="w-20 rounded border border-neutral-300 px-1.5 py-1"
+                className="w-20 rounded-lg border border-neutral-200 px-1.5 py-1"
               />
               <span>to</span>
               <input
@@ -704,13 +706,13 @@ export default function ReviewPage() {
                 step={0.01}
                 value={c.end}
                 onChange={(e) => updateCut(i, { end: parseFloat(e.target.value) })}
-                className="w-20 rounded border border-neutral-300 px-1.5 py-1"
+                className="w-20 rounded-lg border border-neutral-200 px-1.5 py-1"
               />
               <span>s</span>
               <button
                 onClick={() => toggleCutAccepted(i)}
-                className={`ml-auto rounded px-3 py-1 ${
-                  c.accepted ? "bg-red-100 text-red-800" : "bg-neutral-100 text-neutral-600"
+                className={`ml-auto rounded-full px-3 py-1 font-medium ${
+                  c.accepted ? "bg-pink-100 text-pink-700" : "bg-neutral-100 text-neutral-600"
                 }`}
               >
                 {c.accepted ? "Will cut" : "Keep in video"}
@@ -723,13 +725,13 @@ export default function ReviewPage() {
         </ul>
       </section>
 
-      <section className="mb-8">
+      <section className="mb-6 rounded-3xl bg-pink-50 p-6">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-medium">Subject cutout</h2>
+          <h2 className="text-lg font-semibold text-neutral-800">🙋 Subject cutout</h2>
           <button
             onClick={handleGenerateSubjectCutout}
             disabled={subjectCutoutStatus === "processing"}
-            className="rounded-full bg-black px-3 py-1.5 text-xs text-white disabled:opacity-50"
+            className="rounded-full bg-pink-400 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-pink-500 disabled:opacity-50"
           >
             {subjectCutoutStatus === "processing"
               ? "Generating… (~1-2 min)"
@@ -750,20 +752,20 @@ export default function ReviewPage() {
         )}
       </section>
 
-      <section className="mb-8">
-        <h2 className="mb-3 text-lg font-medium">
-          Emphasis moments ({emphasisMoments.length})
+      <section className="mb-6 rounded-3xl bg-violet-50 p-6">
+        <h2 className="mb-3 text-lg font-semibold text-neutral-800">
+          💬 Emphasis moments ({emphasisMoments.length})
         </h2>
         <ul className="space-y-3">
           {emphasisMoments.map((m, i) => (
-            <li key={i} className="rounded-md border border-neutral-200 p-3 text-sm">
+            <li key={i} className="rounded-2xl bg-white p-3 text-sm shadow-sm ring-1 ring-neutral-100">
               <div className="mb-2 flex items-center gap-3">
                 <span className="font-medium">&quot;{m.word}&quot;</span>
                 <span className="text-xs text-neutral-400">{m.source}</span>
                 <button
                   onClick={() => toggleEmphasisApproved(i)}
-                  className={`ml-auto rounded px-3 py-1 ${
-                    m.approved ? "bg-green-100 text-green-800" : "bg-neutral-100 text-neutral-600"
+                  className={`ml-auto rounded-full px-3 py-1 font-medium ${
+                    m.approved ? "bg-sky-100 text-sky-700" : "bg-neutral-100 text-neutral-600"
                   }`}
                 >
                   {m.approved ? "Approved" : "Approve"}
@@ -783,7 +785,7 @@ export default function ReviewPage() {
                 <select
                   value={m.treatment}
                   onChange={(e) => updateEmphasis(i, { treatment: e.target.value as EmphasisMoment["treatment"] })}
-                  className="rounded border border-neutral-300 px-2 py-1 text-xs"
+                  className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs"
                 >
                   {TREATMENTS.map((t) => (
                     <option key={t} value={t}>
@@ -802,7 +804,7 @@ export default function ReviewPage() {
                       max={2}
                       value={m.zoomLevel}
                       onChange={(e) => updateEmphasis(i, { zoomLevel: parseFloat(e.target.value) })}
-                      className="w-16 rounded border border-neutral-300 px-1.5 py-1"
+                      className="w-16 rounded-lg border border-neutral-200 bg-white px-1.5 py-1"
                     />
                   </label>
                 )}
@@ -813,12 +815,12 @@ export default function ReviewPage() {
                       type="text"
                       value={m.calloutText}
                       onChange={(e) => updateEmphasis(i, { calloutText: e.target.value })}
-                      className="w-32 rounded border border-neutral-300 px-1.5 py-1 text-xs"
+                      className="w-32 rounded-lg border border-neutral-200 bg-white px-1.5 py-1 text-xs"
                     />
                     <select
                       value={m.calloutFont}
                       onChange={(e) => updateEmphasis(i, { calloutFont: e.target.value })}
-                      className="rounded border border-neutral-300 px-2 py-1 text-xs"
+                      className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs"
                     >
                       {fonts.map((f) => (
                         <option key={f.key} value={f.key}>
@@ -835,14 +837,14 @@ export default function ReviewPage() {
                         max={300}
                         value={m.calloutFontSize}
                         onChange={(e) => updateEmphasis(i, { calloutFontSize: parseFloat(e.target.value) })}
-                        className="w-16 rounded border border-neutral-300 px-1.5 py-1"
+                        className="w-16 rounded-lg border border-neutral-200 bg-white px-1.5 py-1"
                       />
                     </label>
                     <input
                       type="color"
                       value={m.calloutColor}
                       onChange={(e) => updateEmphasis(i, { calloutColor: e.target.value })}
-                      className="h-7 w-7 rounded border border-neutral-300"
+                      className="h-7 w-7 rounded-lg border border-neutral-200 bg-white"
                     />
                     <PositionPad
                       x={m.calloutX}
@@ -855,6 +857,7 @@ export default function ReviewPage() {
                         checked={m.behindSubject}
                         disabled={subjectCutoutStatus !== "ready"}
                         onChange={(e) => updateEmphasis(i, { behindSubject: e.target.checked })}
+                        className="accent-pink-400"
                       />
                       behind subject
                     </label>
@@ -869,10 +872,10 @@ export default function ReviewPage() {
         </ul>
       </section>
 
-      <section className="mb-8">
+      <section className="mb-6 rounded-3xl bg-pink-50 p-6">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-medium">Image overlays ({imageOverlays.length})</h2>
-          <label className="cursor-pointer rounded-full bg-black px-3 py-1.5 text-xs text-white">
+          <h2 className="text-lg font-semibold text-neutral-800">🖼️ Image overlays ({imageOverlays.length})</h2>
+          <label className="cursor-pointer rounded-full bg-pink-400 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-pink-500">
             {uploadingImage ? "Uploading…" : "Add image"}
             <input
               type="file"
@@ -888,11 +891,11 @@ export default function ReviewPage() {
 
         <ul className="space-y-3">
           {imageOverlays.map((o, i) => (
-            <li key={i} className="rounded-md border border-neutral-200 p-3 text-sm">
+            <li key={i} className="rounded-2xl bg-white p-3 text-sm shadow-sm ring-1 ring-neutral-100">
               <div className="mb-3 flex items-center gap-3">
                 {o.previewUrl && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={o.previewUrl} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
+                  <img src={o.previewUrl} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
                 )}
                 <div className="flex-1">
                   <EmphasisTimingScrubber
@@ -914,7 +917,7 @@ export default function ReviewPage() {
                 <button
                   onClick={() => handleRemoveBackground(i)}
                   disabled={removingBgIndex === i}
-                  className="rounded-full bg-neutral-800 px-3 py-1 text-xs text-white disabled:opacity-50"
+                  className="rounded-full bg-amber-400 px-3 py-1 text-xs font-medium text-white shadow-sm transition hover:bg-amber-500 disabled:opacity-50"
                 >
                   {removingBgIndex === i ? "Removing background…" : "Remove background"}
                 </button>
@@ -935,7 +938,7 @@ export default function ReviewPage() {
                   <select
                     value={o.animationIn}
                     onChange={(e) => updateImageOverlay(i, { animationIn: e.target.value as OverlayEdge })}
-                    className="rounded border border-neutral-300 px-2 py-1 text-xs"
+                    className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs"
                   >
                     {OVERLAY_EDGES.map((edge) => (
                       <option key={edge} value={edge}>
@@ -949,7 +952,7 @@ export default function ReviewPage() {
                   <select
                     value={o.animationOut}
                     onChange={(e) => updateImageOverlay(i, { animationOut: e.target.value as OverlayEdge })}
-                    className="rounded border border-neutral-300 px-2 py-1 text-xs"
+                    className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs"
                   >
                     {OVERLAY_EDGES.map((edge) => (
                       <option key={edge} value={edge}>
@@ -965,6 +968,7 @@ export default function ReviewPage() {
                     checked={o.behindSubject}
                     disabled={subjectCutoutStatus !== "ready"}
                     onChange={(e) => updateImageOverlay(i, { behindSubject: e.target.checked })}
+                    className="accent-pink-400"
                   />
                   behind subject
                 </label>
@@ -977,10 +981,10 @@ export default function ReviewPage() {
         </ul>
       </section>
 
-      <section className="mb-8">
+      <section className="mb-6 rounded-3xl bg-amber-50 p-6">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-medium">Overlay whole video ({videoOverlays.length})</h2>
-          <label className="cursor-pointer rounded-full bg-black px-3 py-1.5 text-xs text-white">
+          <h2 className="text-lg font-semibold text-neutral-800">🎬 Overlay whole video ({videoOverlays.length})</h2>
+          <label className="cursor-pointer rounded-full bg-amber-400 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-amber-500">
             {uploadingVideoOverlay ? "Uploading…" : "Add video"}
             <input
               type="file"
@@ -1000,10 +1004,10 @@ export default function ReviewPage() {
 
         <ul className="space-y-3">
           {videoOverlays.map((o, i) => (
-            <li key={i} className="rounded-md border border-neutral-200 p-3 text-sm">
+            <li key={i} className="rounded-2xl bg-white p-3 text-sm shadow-sm ring-1 ring-neutral-100">
               <div className="flex items-center gap-3">
                 {o.previewUrl && (
-                  <video src={o.previewUrl} muted className="h-12 w-12 shrink-0 rounded object-cover" />
+                  <video src={o.previewUrl} muted className="h-12 w-12 shrink-0 rounded-lg object-cover" />
                 )}
                 <div className="flex-1">
                   <EmphasisTimingScrubber
@@ -1031,25 +1035,25 @@ export default function ReviewPage() {
       <button
         onClick={handleSave}
         disabled={saveState === "saving"}
-        className="mb-10 rounded-md bg-black px-5 py-2.5 text-white"
+        className="mb-6 rounded-full bg-emerald-400 px-5 py-2.5 font-medium text-white shadow-sm transition hover:bg-emerald-500 disabled:opacity-60"
       >
-        {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : "Save changes"}
+        {saveState === "saving" ? "Saving…" : saveState === "saved" ? "✓ Saved" : "Save changes"}
       </button>
 
-      <section className="mb-10 border-t border-neutral-200 pt-8">
-        <h2 className="mb-3 text-lg font-medium">Prompter</h2>
+      <section className="mb-6 rounded-3xl bg-orange-50 p-6">
+        <h2 className="mb-3 text-lg font-semibold text-neutral-800">🪄 Prompter</h2>
         <form onSubmit={handlePromptSubmit} className="flex flex-col gap-3">
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="e.g. make it light and fun, use karaoke captions, zoom in on 'independent'"
             rows={3}
-            className="rounded-md border border-neutral-300 p-3 text-sm"
+            className="rounded-xl border border-neutral-200 bg-white p-3 text-sm"
           />
           <button
             type="submit"
             disabled={promptState === "sending"}
-            className="self-start rounded-md bg-black px-5 py-2.5 text-white"
+            className="self-start rounded-full bg-neutral-800 px-5 py-2.5 font-medium text-white shadow-sm transition hover:bg-neutral-900 disabled:opacity-60"
           >
             {promptState === "sending" ? "Thinking…" : "Send"}
           </button>
@@ -1059,12 +1063,12 @@ export default function ReviewPage() {
         )}
       </section>
 
-      <section className="border-t border-neutral-200 pt-8">
-        <h2 className="mb-3 text-lg font-medium">Render</h2>
+      <section className="rounded-3xl bg-sky-50 p-6">
+        <h2 className="mb-3 text-lg font-semibold text-neutral-800">🚀 Render</h2>
         <button
           onClick={handleRender}
           disabled={renderState === "rendering"}
-          className="rounded-md bg-black px-5 py-2.5 text-white"
+          className="rounded-full bg-sky-400 px-5 py-2.5 font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
         >
           {renderState === "rendering"
             ? `Rendering… ${Math.round(renderProgress * 100)}%`
@@ -1142,9 +1146,9 @@ function EmphasisTimingScrubber({
   return (
     <div className="flex items-center gap-2 text-xs text-neutral-500">
       <span className="w-12 shrink-0">{start.toFixed(2)}s</span>
-      <div ref={trackRef} className="relative h-5 flex-1 rounded bg-neutral-100">
+      <div ref={trackRef} className="relative h-5 flex-1 rounded-full bg-neutral-100">
         <div
-          className="absolute top-0 h-full rounded bg-blue-200"
+          className="absolute top-0 h-full rounded-full bg-sky-200"
           style={{
             left: `${(start / duration) * 100}%`,
             width: `${Math.max(((end - start) / duration) * 100, 0.5)}%`,
@@ -1156,7 +1160,7 @@ function EmphasisTimingScrubber({
             if (e.buttons !== 1) return;
             onChange({ start: Math.min(timeAtClientX(e.clientX), end - 0.05), end });
           }}
-          className="absolute top-0 h-full w-2.5 cursor-ew-resize rounded-l bg-blue-600"
+          className="absolute top-0 h-full w-2.5 cursor-ew-resize rounded-l-full bg-sky-400"
           style={{ left: `${(start / duration) * 100}%` }}
         />
         <div
@@ -1165,7 +1169,7 @@ function EmphasisTimingScrubber({
             if (e.buttons !== 1) return;
             onChange({ start, end: Math.max(timeAtClientX(e.clientX), start + 0.05) });
           }}
-          className="absolute top-0 h-full w-2.5 cursor-ew-resize rounded-r bg-blue-600"
+          className="absolute top-0 h-full w-2.5 cursor-ew-resize rounded-r-full bg-sky-400"
           style={{ left: `calc(${(end / duration) * 100}% - 10px)` }}
         />
       </div>
@@ -1211,7 +1215,7 @@ function PositionPad({
         updateFromClient(e.clientX, e.clientY);
       }}
       title="Drag to position"
-      className="relative h-28 w-[63px] shrink-0 cursor-crosshair rounded-md border border-neutral-300 bg-neutral-800"
+      className="relative h-28 w-[63px] shrink-0 cursor-crosshair rounded-xl border border-neutral-200 bg-neutral-800"
     >
       <div
         className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-pink-400"
