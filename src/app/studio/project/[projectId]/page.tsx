@@ -93,8 +93,11 @@ export default function ProjectPage() {
   }
 
   useEffect(() => {
-    loadClips();
-    loadPastRenders();
+    async function load() {
+      await loadClips();
+      await loadPastRenders();
+    }
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
