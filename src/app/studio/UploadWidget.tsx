@@ -126,8 +126,9 @@ export default function UploadWidget() {
 
   return (
     <div className="flex flex-col items-center gap-3">
-      <label className="flex w-full cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-neutral-300 px-6 py-12">
-        <span className="font-medium">
+      <label className="flex w-full cursor-pointer flex-col items-center gap-2 rounded-3xl border-2 border-dashed border-sky-200 bg-sky-50 px-6 py-12 transition hover:border-sky-300 hover:bg-sky-100">
+        <span className="text-2xl">📹</span>
+        <span className="font-medium text-neutral-700">
           {status === "uploading" && (progressLabel || "Uploading…")}
           {status === "transcribing" && "Transcribing…"}
           {(status === "idle" || status === "error") && "Choose one or more videos"}

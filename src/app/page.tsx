@@ -23,33 +23,46 @@ const FEATURES = [
   },
 ];
 
+const CARD_COLORS = ["bg-sky-50", "bg-pink-50", "bg-amber-50", "bg-violet-50", "bg-emerald-50"];
+
 export default function Home() {
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-16 px-6 py-20">
       <div className="flex flex-col items-center gap-6 text-center">
-        <h1 className="text-3xl font-semibold">Jillian&apos;s Auto-Editor</h1>
-        <p className="max-w-lg text-neutral-600">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icon.png" alt="" className="h-16 w-16" />
+        <h1 className="text-3xl font-bold text-neutral-800">Jillian&apos;s Auto-Editor</h1>
+        <p className="max-w-lg text-neutral-500">
           A personal editing tool that turns a raw talking-head recording into a
           publish-ready TikTok clip — automatic cuts, captions, and styling, with
           manual control over anything worth adjusting by hand.
         </p>
-        <div className="flex gap-4">
-          <Link href="/studio" className="rounded-md bg-black px-5 py-2.5 text-white">
+        <div className="flex gap-3">
+          <Link
+            href="/studio"
+            className="rounded-full bg-sky-400 px-5 py-2.5 font-medium text-white shadow-sm transition hover:bg-sky-500"
+          >
             Studio
           </Link>
-          <Link href="/insights" className="rounded-md bg-black px-5 py-2.5 text-white">
+          <Link
+            href="/insights"
+            className="rounded-full bg-pink-400 px-5 py-2.5 font-medium text-white shadow-sm transition hover:bg-pink-500"
+          >
             Insights
           </Link>
-          <Link href="/ideas" className="rounded-md bg-black px-5 py-2.5 text-white">
+          <Link
+            href="/ideas"
+            className="rounded-full bg-amber-400 px-5 py-2.5 font-medium text-white shadow-sm transition hover:bg-amber-500"
+          >
             Ideas
           </Link>
         </div>
       </div>
 
-      <div className="grid gap-8 sm:grid-cols-2">
-        {FEATURES.map((feature) => (
-          <div key={feature.title} className="flex flex-col gap-2">
-            <h2 className="text-lg font-semibold">{feature.title}</h2>
+      <div className="grid gap-5 sm:grid-cols-2">
+        {FEATURES.map((feature, i) => (
+          <div key={feature.title} className={`rounded-3xl p-5 ${CARD_COLORS[i % CARD_COLORS.length]}`}>
+            <h2 className="mb-1 text-lg font-semibold text-neutral-800">{feature.title}</h2>
             <p className="text-sm text-neutral-600">{feature.body}</p>
           </div>
         ))}

@@ -237,14 +237,14 @@ export default function ProjectPage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-16">
-      <h1 className="mb-2 text-2xl font-semibold">Project</h1>
-      <p className="mb-6 text-neutral-600">
+    <main className="mx-auto max-w-2xl px-6 py-14">
+      <h1 className="mb-2 text-3xl font-bold text-neutral-800">Project 🎞️</h1>
+      <p className="mb-6 text-neutral-500">
         Reorder your clips, edit cuts/emphasis on each, then render the whole thing.
       </p>
 
-      <section className="mb-10">
-        <h2 className="mb-3 text-lg font-medium">
+      <section className="mb-6 rounded-3xl bg-sky-50 p-6">
+        <h2 className="mb-3 text-lg font-semibold text-neutral-800">
           Header title <span className="font-normal text-neutral-400">(shown above your head, whole video)</span>
         </h2>
         <div className="flex gap-2">
@@ -256,25 +256,25 @@ export default function ProjectPage() {
               setHeaderSaveState("idle");
             }}
             placeholder="auto-generated after all clips finish uploading"
-            className="flex-1 rounded border border-neutral-300 px-2 py-1.5 text-sm"
+            className="flex-1 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-sm"
           />
           <button
             onClick={handleSaveHeaderTitle}
             disabled={headerSaveState === "saving"}
-            className="rounded bg-black px-3 py-1.5 text-sm text-white"
+            className="rounded-full bg-sky-400 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
           >
             {headerSaveState === "saving" ? "Saving…" : headerSaveState === "saved" ? "Saved" : "Save"}
           </button>
         </div>
       </section>
 
-      <section className="mb-10">
+      <section className="mb-6 rounded-3xl bg-amber-50 p-6">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-medium">Clips ({includedClips.length})</h2>
+          <h2 className="text-lg font-semibold text-neutral-800">Clips ({includedClips.length})</h2>
           <button
             onClick={handleArrangeStory}
             disabled={storyState === "arranging"}
-            className="rounded-full bg-black px-3 py-1.5 text-xs text-white"
+            className="rounded-full bg-amber-400 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-amber-500 disabled:opacity-60"
           >
             {storyState === "arranging" ? "Arranging…" : "Auto-arrange story"}
           </button>
@@ -291,13 +291,13 @@ export default function ProjectPage() {
           {includedClips.map((clip, i) => (
             <li
               key={clip.id}
-              className="flex items-center gap-3 rounded-md border border-neutral-200 p-3 text-sm"
+              className="flex items-center gap-3 rounded-2xl bg-white p-3 text-sm shadow-sm ring-1 ring-neutral-100"
             >
               <div className="flex flex-col gap-1">
                 <button
                   onClick={() => moveClip(clip, -1)}
                   disabled={i === 0}
-                  className="text-neutral-400 hover:text-black disabled:opacity-30"
+                  className="text-neutral-400 hover:text-neutral-800 disabled:opacity-30"
                   aria-label="Move up"
                 >
                   ▲
@@ -305,7 +305,7 @@ export default function ProjectPage() {
                 <button
                   onClick={() => moveClip(clip, 1)}
                   disabled={i === includedClips.length - 1}
-                  className="text-neutral-400 hover:text-black disabled:opacity-30"
+                  className="text-neutral-400 hover:text-neutral-800 disabled:opacity-30"
                   aria-label="Move down"
                 >
                   ▼
@@ -315,7 +315,7 @@ export default function ProjectPage() {
                 {i + 1}. {clip.topic_tag ?? "(untitled)"}
                 {clip.duration_seconds ? ` — ${Math.round(clip.duration_seconds)}s` : ""}
               </Link>
-              <span className="text-neutral-500">{clip.status}</span>
+              <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs text-neutral-500">{clip.status}</span>
               <button
                 onClick={() => setIncluded(clip, false)}
                 className="text-neutral-400 hover:text-red-600"
@@ -335,7 +335,7 @@ export default function ProjectPage() {
               {excludedClips.map((clip) => (
                 <li
                   key={clip.id}
-                  className="flex items-center gap-3 rounded-md border border-dashed border-neutral-200 p-3 text-sm text-neutral-400"
+                  className="flex items-center gap-3 rounded-2xl border border-dashed border-neutral-200 bg-white/60 p-3 text-sm text-neutral-400"
                 >
                   <Link href={`/studio/${clip.id}`} className="flex-1 hover:underline">
                     {clip.topic_tag ?? "(untitled)"}
@@ -343,7 +343,7 @@ export default function ProjectPage() {
                   </Link>
                   <button
                     onClick={() => setIncluded(clip, true)}
-                    className="text-neutral-500 hover:text-black"
+                    className="text-neutral-500 hover:text-neutral-800"
                   >
                     Add back
                   </button>
@@ -354,8 +354,8 @@ export default function ProjectPage() {
         )}
       </section>
 
-      <section className="mb-10 border-t border-neutral-200 pt-8">
-        <h2 className="mb-3 text-lg font-medium">Prompter (whole project)</h2>
+      <section className="mb-6 rounded-3xl bg-orange-50 p-6">
+        <h2 className="mb-3 text-lg font-semibold text-neutral-800">🪄 Prompter (whole project)</h2>
         <p className="mb-3 text-sm text-neutral-500">
           Style changes (mood, caption style, color) apply to every clip. Emphasis requests
           (&quot;zoom in on X&quot;) search all clips&apos; transcripts for the word.
@@ -366,12 +366,12 @@ export default function ProjectPage() {
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="e.g. make it all light and fun, use karaoke captions everywhere, zoom in on 'independent'"
             rows={3}
-            className="rounded-md border border-neutral-300 p-3 text-sm"
+            className="rounded-xl border border-neutral-200 bg-white p-3 text-sm"
           />
           <button
             type="submit"
             disabled={promptState === "sending"}
-            className="self-start rounded-md bg-black px-5 py-2.5 text-white"
+            className="self-start rounded-full bg-neutral-800 px-5 py-2.5 font-medium text-white shadow-sm transition hover:bg-neutral-900 disabled:opacity-60"
           >
             {promptState === "sending" ? "Thinking…" : "Send"}
           </button>
@@ -380,12 +380,12 @@ export default function ProjectPage() {
         {promptErrorMessage && <p className="mt-3 text-sm text-red-600">{promptErrorMessage}</p>}
       </section>
 
-      <section className="border-t border-neutral-200 pt-8">
-        <h2 className="mb-3 text-lg font-medium">Render</h2>
+      <section className="rounded-3xl bg-sky-50 p-6">
+        <h2 className="mb-3 text-lg font-semibold text-neutral-800">🚀 Render</h2>
         <button
           onClick={handleRender}
           disabled={renderState === "rendering"}
-          className="rounded-md bg-black px-5 py-2.5 text-white"
+          className="rounded-full bg-sky-400 px-5 py-2.5 font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
         >
           {renderState === "rendering"
             ? `Rendering… ${Math.round(renderProgress * 100)}%`

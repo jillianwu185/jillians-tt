@@ -39,11 +39,11 @@ export default function IdeasPage() {
 
   return (
     <main className="mx-auto flex h-screen max-w-2xl flex-col px-6 py-8">
-      <h1 className="mb-4 text-2xl font-semibold">Ideas</h1>
+      <h1 className="mb-4 text-3xl font-bold text-neutral-800">Ideas 💡</h1>
 
       <div className="mb-4 flex-1 space-y-4 overflow-y-auto">
         {messages.length === 0 && (
-          <p className="text-neutral-500">
+          <p className="rounded-2xl bg-amber-50 p-4 text-neutral-600">
             Ask me for video ideas — I&apos;ll ground suggestions in what&apos;s actually working
             on your TikTok, once there&apos;s enough synced data.
           </p>
@@ -51,8 +51,8 @@ export default function IdeasPage() {
         {messages.map((m, i) => (
           <div
             key={i}
-            className={`rounded-lg p-3 text-sm ${
-              m.role === "user" ? "ml-auto max-w-[80%] bg-black text-white" : "max-w-[80%] bg-neutral-100"
+            className={`rounded-2xl p-3 text-sm shadow-sm ${
+              m.role === "user" ? "ml-auto max-w-[80%] bg-sky-400 text-white" : "max-w-[80%] bg-amber-50 text-neutral-700"
             }`}
           >
             {m.content}
@@ -66,12 +66,12 @@ export default function IdeasPage() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="What should I make next?"
-          className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="flex-1 rounded-full border border-neutral-200 px-4 py-2 text-sm"
         />
         <button
           type="submit"
           disabled={sending}
-          className="rounded-md bg-black px-5 py-2 text-sm text-white"
+          className="rounded-full bg-sky-400 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
         >
           {sending ? "…" : "Send"}
         </button>

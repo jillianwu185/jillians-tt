@@ -28,26 +28,26 @@ export default async function StudioPage() {
 
   return (
     <main className="mx-auto flex max-w-xl flex-col items-center gap-6 px-6 py-16 text-center">
-      <h1 className="text-2xl font-semibold">Studio</h1>
-      <p className="text-neutral-600">Upload a raw clip to get started.</p>
+      <h1 className="text-3xl font-bold text-neutral-800">Studio 🎬</h1>
+      <p className="text-neutral-500">Upload a raw clip to get started.</p>
 
       <UploadWidget />
 
       {projects && projects.length > 0 && (
-        <section className="w-full text-left">
-          <h2 className="mb-3 text-lg font-medium">Your projects (multi-clip)</h2>
+        <section className="w-full rounded-3xl bg-violet-50 p-6 text-left">
+          <h2 className="mb-3 text-lg font-semibold text-neutral-800">Your projects (multi-clip)</h2>
           <ul className="space-y-2">
             {projects.map((project) => (
               <li
                 key={project.id}
-                className="flex items-center rounded-md border border-neutral-200 p-3 text-sm hover:bg-neutral-50"
+                className="flex items-center rounded-2xl bg-white p-3 text-sm shadow-sm ring-1 ring-neutral-100 transition hover:ring-violet-200"
               >
                 <Link
                   href={`/studio/project/${project.id}`}
                   className="flex flex-1 items-center justify-between"
                 >
                   <span>{project.topic_tag ?? "(untitled project)"}</span>
-                  <span className="text-neutral-500">
+                  <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs text-neutral-500">
                     {STATUS_LABELS[project.status] ?? project.status}
                   </span>
                 </Link>
@@ -59,13 +59,13 @@ export default async function StudioPage() {
       )}
 
       {videos && videos.length > 0 && (
-        <section className="w-full text-left">
-          <h2 className="mb-3 text-lg font-medium">Your videos</h2>
+        <section className="w-full rounded-3xl bg-sky-50 p-6 text-left">
+          <h2 className="mb-3 text-lg font-semibold text-neutral-800">Your videos</h2>
           <ul className="space-y-2">
             {videos.map((video) => (
               <li
                 key={video.id}
-                className="flex items-center rounded-md border border-neutral-200 p-3 text-sm hover:bg-neutral-50"
+                className="flex items-center rounded-2xl bg-white p-3 text-sm shadow-sm ring-1 ring-neutral-100 transition hover:ring-sky-200"
               >
                 <Link href={`/studio/${video.id}`} className="flex flex-1 items-center justify-between">
                   <span>
@@ -74,7 +74,7 @@ export default async function StudioPage() {
                       {video.duration_seconds ? `${Math.round(video.duration_seconds)}s` : ""}
                     </span>
                   </span>
-                  <span className="text-neutral-500">
+                  <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs text-neutral-500">
                     {STATUS_LABELS[video.status] ?? video.status}
                   </span>
                 </Link>

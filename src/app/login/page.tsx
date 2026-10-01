@@ -28,9 +28,13 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto flex max-w-sm flex-col items-center gap-6 px-6 py-32 text-center">
-      <h1 className="text-2xl font-semibold">Sign in</h1>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/icon.png" alt="" className="h-14 w-14" />
+      <h1 className="text-2xl font-bold text-neutral-800">Sign in</h1>
       {status === "sent" ? (
-        <p className="text-neutral-600">Check your email for a login link.</p>
+        <p className="rounded-2xl bg-sky-50 px-5 py-4 text-neutral-600">
+          Check your email for a login link. ✉️
+        </p>
       ) : (
         <form onSubmit={handleSubmit} className="flex w-full flex-col gap-3">
           <input
@@ -39,9 +43,12 @@ export default function LoginPage() {
             placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="rounded-md border border-neutral-300 px-3 py-2"
+            className="rounded-full border border-neutral-200 px-4 py-2.5 text-center"
           />
-          <button type="submit" className="rounded-md bg-black px-5 py-2.5 text-white">
+          <button
+            type="submit"
+            className="rounded-full bg-sky-400 px-5 py-2.5 font-medium text-white shadow-sm transition hover:bg-sky-500"
+          >
             Send login link
           </button>
           {status === "error" && (

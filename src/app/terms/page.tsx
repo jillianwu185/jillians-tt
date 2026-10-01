@@ -5,7 +5,7 @@ export const metadata = {
 export default function TermsOfService() {
   return (
     <main className="mx-auto max-w-2xl px-6 py-16 text-sm leading-7 text-neutral-800">
-      <h1 className="mb-2 text-2xl font-semibold text-neutral-900">Terms of Service</h1>
+      <h1 className="mb-2 text-2xl font-bold text-neutral-900">Terms of Service</h1>
       <p className="mb-8 text-neutral-500">Last updated: September 16, 2026</p>
 
       <p className="mb-6">
@@ -42,7 +42,7 @@ export default function TermsOfService() {
       <h2 className="mb-2 mt-8 text-lg font-semibold text-neutral-900">Contact</h2>
       <p>
         Questions can be sent to{" "}
-        <a className="underline" href="mailto:jillian.w@wustl.edu">
+        <a className="text-sky-600 underline" href="mailto:jillian.w@wustl.edu">
           jillian.w@wustl.edu
         </a>
         .
