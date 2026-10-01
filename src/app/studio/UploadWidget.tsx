@@ -6,7 +6,9 @@ import { createClient } from "@/lib/supabase/client";
 
 type Status = "idle" | "uploading" | "transcribing" | "error";
 
-const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+// Supabase's own per-file cap was raised (Pro plan) well past this — this is
+// just a sanity ceiling against an accidental huge/wrong file selection.
+const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 * 1024;
 
 export default function UploadWidget() {
   const router = useRouter();
@@ -70,7 +72,7 @@ export default function UploadWidget() {
     const oversized = files.find((f) => f.size > MAX_FILE_SIZE_BYTES);
     if (oversized) {
       setErrorMessage(
-        `"${oversized.name}" is ${(oversized.size / 1024 / 1024).toFixed(0)}MB — Supabase's free plan caps uploads at 50MB. Try a shorter clip or lower export quality.`
+        `"${oversized.name}" is ${(oversized.size / 1024 / 1024).toFixed(0)}MB — that's larger than this app expects for a single clip. Try a shorter clip or lower export quality.`
       );
       setStatus("error");
       return;

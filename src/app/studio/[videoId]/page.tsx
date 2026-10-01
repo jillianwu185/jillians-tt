@@ -59,7 +59,9 @@ type Font = { key: string; display_name: string; google_font_family: string };
 type LoadState = "loading" | "ready" | "error";
 
 const OVERLAY_EDGES: OverlayEdge[] = ["none", "left", "right", "top", "bottom", "crumble"];
-const MAX_VIDEO_OVERLAY_SIZE_BYTES = 50 * 1024 * 1024;
+// Supabase's own per-file cap was raised (Pro plan) well past this — this is
+// just a sanity ceiling against an accidental huge/wrong file selection.
+const MAX_VIDEO_OVERLAY_SIZE_BYTES = 2 * 1024 * 1024 * 1024;
 
 const CAPTION_STYLES = [
   "two_layer_headline",
@@ -342,7 +344,7 @@ export default function ReviewPage() {
     if (!file) return;
     if (file.size > MAX_VIDEO_OVERLAY_SIZE_BYTES) {
       setVideoOverlayUploadError(
-        `"${file.name}" is ${(file.size / 1024 / 1024).toFixed(0)}MB — the free plan caps uploads at 50MB.`
+        `"${file.name}" is ${(file.size / 1024 / 1024).toFixed(0)}MB — that's larger than this app expects for an overlay clip.`
       );
       return;
     }
